@@ -60,7 +60,7 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
   const NavItem = ({ icon: Icon, label, overdueBadge, dueSoonBadge, onClick, isActive, danger }) => (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+      className={`relative w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
         isActive
           ? 'bg-primary/20 text-primary'
           : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
@@ -88,9 +88,9 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
           </span>
         )}
       </div>
-      {/* Collapsed badges - only on desktop when collapsed */}
+      {/* Collapsed badges - only on desktop when collapsed, centered above icon */}
       {collapsed && (overdueBadge?.count > 0 || dueSoonBadge?.count > 0) && (
-        <div className="absolute top-0 right-0 hidden md:flex gap-0.5 transform translate-x-1/2 -translate-y-1/2">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 hidden md:flex gap-0.5">
           {dueSoonBadge?.count > 0 && (
             <span
               className="bg-warning text-black text-xs w-4 h-4 flex items-center justify-center rounded-full"
@@ -131,10 +131,17 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
       {/* Header */}
       <div className="p-4 border-b border-border flex items-center justify-between">
         <div className={`flex items-center justify-center flex-1 ${collapsed ? 'md:w-8 md:flex-none' : ''}`}>
+          {/* Full logo - hidden on desktop when collapsed */}
           <img
             src="/assets/mission-control-orange-logo.png"
             alt="Mission Control"
-            className={`object-contain h-12 max-w-full ${collapsed ? 'md:w-8 md:h-8' : ''}`}
+            className={`object-contain h-12 max-w-full ${collapsed ? 'md:hidden' : ''}`}
+          />
+          {/* Icon only - shown on desktop when collapsed */}
+          <img
+            src="/assets/mission-control-orange-favicon.png"
+            alt="Mission Control"
+            className={`object-contain w-8 h-8 hidden ${collapsed ? 'md:block' : ''}`}
           />
         </div>
         <button
