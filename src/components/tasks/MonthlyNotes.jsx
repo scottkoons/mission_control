@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTasks } from '../../context/TaskContext';
 
-const MonthlyNotes = ({ monthKey, monthName }) => {
+const MonthlyNotes = ({ monthKey, monthName, rightAction }) => {
   const { monthlyNotes, updateMonthlyNotes } = useTasks();
   const [notes, setNotes] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -35,9 +35,12 @@ const MonthlyNotes = ({ monthKey, monthName }) => {
 
   return (
     <div className="flex-1 flex flex-col">
-      <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
-        {monthName} Notes
-      </label>
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
+          {monthName} Notes
+        </label>
+        {rightAction}
+      </div>
       <textarea
         value={notes}
         onChange={handleChange}

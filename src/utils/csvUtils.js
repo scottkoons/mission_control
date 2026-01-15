@@ -88,7 +88,7 @@ export const parseCSV = (content) => {
   const lines = content.split('\n').filter((line) => line.trim() && !line.startsWith('#'));
   if (lines.length < 2) return { tasks: [], monthlyNotes: {} };
 
-  const headers = parseCSVLine(lines[0]);
+  const headers = parseCSVLine(lines[0]).map(h => h.trim());
   const tasks = [];
   const monthlyNotes = {};
 
@@ -104,7 +104,7 @@ export const parseCSV = (content) => {
       continue;
     }
 
-    const values = parseCSVLine(line);
+    const values = parseCSVLine(line).map(v => v.trim());
 
     if (parsingTasks) {
       // Parse task row - only task_name is required

@@ -135,12 +135,18 @@ export const formatDateForCSV = (dateString) => {
   return format(date, 'MM/dd/yyyy');
 };
 
-// Parse date from CSV (MM/DD/YYYY)
+// Parse date from CSV (MM/DD/YYYY or MM/DD/YY)
 export const parseDateFromCSV = (dateString) => {
   if (!dateString) return null;
-  const parts = dateString.split('/');
+  const trimmed = dateString.trim();
+  const parts = trimmed.split('/');
   if (parts.length !== 3) return null;
   const [month, day, year] = parts;
-  const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  let fullYear = parseInt(year);
+  // Handle 2-digit years (assume 2000s)
+  if (fullYear < 100) {
+    fullYear = 2000 + fullYear;
+  }
+  const date = new Date(fullYear, parseInt(month) - 1, parseInt(day));
   return isValid(date) ? format(date, 'yyyy-MM-dd') : null;
 };
