@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Upload, Download, FileText } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
@@ -11,12 +11,31 @@ const CSVImport = ({ isOpen, onClose }) => {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
   const { createTask, updateMonthlyNotes } = useTasks();
   const { addToast } = useToast();
 
-  const handleFileSelect = async (e) => {
-    const selectedFile = e.target.files[0];
+  // Prevent browser default drag behavior when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const preventDefaults = (e) => {
+      e.preventDefault();
+    };
+
+    document.addEventListener('dragenter', preventDefaults);
+    document.addEventListener('dragover', preventDefaults);
+    document.addEventListener('drop', preventDefaults);
+
+    return () => {
+      document.removeEventListener('dragenter', preventDefaults);
+      document.removeEventListener('dragover', preventDefaults);
+      document.removeEventListener('drop', preventDefaults);
+    };
+  }, [isOpen]);
+
+  const processFile = async (selectedFile) => {
     if (!selectedFile) return;
 
     if (!selectedFile.name.endsWith('.csv')) {
@@ -30,6 +49,37 @@ const CSVImport = ({ isOpen, onClose }) => {
     const content = await selectedFile.text();
     const parsed = parseCSV(content);
     setPreview(parsed);
+  };
+
+  const handleFileSelect = async (e) => {
+    const selectedFile = e.target.files[0];
+    processFile(selectedFile);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const droppedFile = e.dataTransfer.files[0];
+    processFile(droppedFile);
   };
 
   const handleDownloadTemplate = () => {
@@ -87,8 +137,16 @@ const CSVImport = ({ isOpen, onClose }) => {
       <div className="space-y-4">
         {/* File Drop Zone */}
         <div
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-border rounded-xl p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+          className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+            isDragging
+              ? 'border-primary bg-primary/10'
+              : 'border-border hover:border-primary/50'
+          }`}
         >
           <input
             ref={fileInputRef}

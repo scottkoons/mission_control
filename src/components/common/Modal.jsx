@@ -28,6 +28,21 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
     }
   };
 
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e) => {
+    // Only prevent default if the drop wasn't handled by a child
+    if (!e.defaultPrevented) {
+      e.preventDefault();
+    }
+  };
+
   if (!isOpen) return null;
 
   const sizeClasses = {
@@ -41,10 +56,16 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
       onClick={handleBackdropClick}
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDrop={handleDrop}
     >
       <div
         ref={modalRef}
         className={`bg-surface rounded-xl shadow-xl w-full ${sizeClasses[size]} max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in duration-200`}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDrop={handleDrop}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
@@ -58,7 +79,12 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div
+          className="flex-1 overflow-y-auto px-6 py-4"
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDrop={handleDrop}
+        >
           {children}
         </div>
       </div>

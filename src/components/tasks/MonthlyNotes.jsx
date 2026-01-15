@@ -34,7 +34,7 @@ const MonthlyNotes = ({ monthKey, monthName }) => {
   };
 
   return (
-    <div className="mt-4 pt-4 border-t border-border">
+    <div className="flex-1 flex flex-col">
       <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
         {monthName} Notes
       </label>
@@ -44,10 +44,9 @@ const MonthlyNotes = ({ monthKey, monthName }) => {
         onFocus={() => setIsFocused(true)}
         onBlur={handleBlur}
         placeholder="Type generic notes here..."
-        className={`w-full bg-surface-hover border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted resize-none transition-colors ${
+        className={`w-full flex-1 bg-surface-hover border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted resize-none transition-colors min-h-[80px] ${
           isFocused ? 'border-primary ring-1 ring-primary' : 'border-border'
         }`}
-        rows={3}
       />
     </div>
   );

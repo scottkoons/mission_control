@@ -5,10 +5,12 @@ import {
   startOfWeek,
   endOfWeek,
   eachDayOfInterval,
+  addDays,
   format,
   isSameMonth,
   isSameDay,
   isToday,
+  parseISO,
 } from 'date-fns';
 import CalendarTask from './CalendarTask';
 
@@ -19,7 +21,15 @@ const CalendarGrid = ({ currentDate, tasks, dateFilter, onEditTask }) => {
     const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 });
     const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
 
-    return eachDayOfInterval({ start: calendarStart, end: calendarEnd });
+    let allDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
+
+    // Always fill to 42 days (6 complete rows) for consistent layout
+    while (allDays.length < 42) {
+      const lastDay = allDays[allDays.length - 1];
+      allDays.push(addDays(lastDay, 1));
+    }
+
+    return allDays;
   }, [currentDate]);
 
   // Get tasks for a specific day
@@ -27,9 +37,9 @@ const CalendarGrid = ({ currentDate, tasks, dateFilter, onEditTask }) => {
     const tasksForDay = [];
 
     tasks.forEach((task) => {
-      // Check draft due
+      // Check draft due - use parseISO to avoid timezone issues
       if ((dateFilter === 'all' || dateFilter === 'draft') && task.draftDue) {
-        const draftDate = new Date(task.draftDue);
+        const draftDate = parseISO(task.draftDue);
         if (isSameDay(draftDate, day)) {
           tasksForDay.push({
             ...task,
@@ -40,13 +50,13 @@ const CalendarGrid = ({ currentDate, tasks, dateFilter, onEditTask }) => {
 
       // Check final due (avoid duplicate if same day as draft)
       if ((dateFilter === 'all' || dateFilter === 'final') && task.finalDue) {
-        const finalDate = new Date(task.finalDue);
+        const finalDate = parseISO(task.finalDue);
         if (isSameDay(finalDate, day)) {
           // Don't add duplicate if draft and final are same day and showing all
           const isDuplicate =
             dateFilter === 'all' &&
             task.draftDue &&
-            isSameDay(new Date(task.draftDue), finalDate);
+            isSameDay(parseISO(task.draftDue), finalDate);
 
           if (!isDuplicate) {
             tasksForDay.push({

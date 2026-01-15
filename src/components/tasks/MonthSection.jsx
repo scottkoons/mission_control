@@ -23,23 +23,19 @@ const MonthSection = ({ monthKey, tasks, onEditTask, onAddTask }) => {
         />
       </div>
 
-      {/* Footer: Notes + Add Button */}
-      <div className="px-6 pb-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <MonthlyNotes
-              monthKey={monthKey}
-              monthName={monthName}
-            />
-          </div>
-          <button
-            onClick={() => onAddTask(monthKey)}
-            className="mt-8 flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
-          >
-            <Plus size={16} />
-            <span>Add New Task</span>
-          </button>
-        </div>
+      {/* Footer: Add Button + Notes */}
+      <div className="px-6 pb-6 pt-4 flex flex-col flex-1">
+        <button
+          onClick={() => onAddTask(monthKey)}
+          className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors mb-4"
+        >
+          <Plus size={16} />
+          <span>Add New Task</span>
+        </button>
+        <MonthlyNotes
+          monthKey={monthKey}
+          monthName={monthName}
+        />
       </div>
     </div>
   );

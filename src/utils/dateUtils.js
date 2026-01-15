@@ -26,7 +26,7 @@ export const getMonthKey = (dateString) => {
 
 // Get month display name (e.g., "January 2026")
 export const getMonthDisplayName = (monthKey) => {
-  if (!monthKey) return 'Unscheduled';
+  if (!monthKey || monthKey === 'unscheduled') return 'Unscheduled';
   const [year, month] = monthKey.split('-');
   const date = new Date(parseInt(year), parseInt(month) - 1, 1);
   return format(date, 'MMMM yyyy');

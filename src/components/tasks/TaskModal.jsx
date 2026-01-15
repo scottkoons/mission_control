@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
-import { Upload, X, Copy } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Upload, X, Copy, Download, FileText, Maximize2 } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
+import FilePreview from '../files/FilePreview';
 import { useTasks } from '../../context/TaskContext';
 import { formatDateForInput, getQuickDates } from '../../utils/dateUtils';
 import { format } from 'date-fns';
@@ -18,8 +19,13 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
     repeat: 'none',
     attachments: [],
   });
+  const [isDragging, setIsDragging] = useState(false);
+  const [previewFile, setPreviewFile] = useState(null);
+  const [dateError, setDateError] = useState('');
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
+    setDateError(''); // Clear any previous error
     if (task) {
       setFormData({
         taskName: task.taskName || '',
@@ -49,21 +55,62 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
     }
   }, [task, defaultMonth, isOpen]);
 
+  // Prevent browser default drag behavior when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const preventDefaults = (e) => {
+      e.preventDefault();
+    };
+
+    document.addEventListener('dragenter', preventDefaults);
+    document.addEventListener('dragover', preventDefaults);
+    document.addEventListener('drop', preventDefaults);
+
+    return () => {
+      document.removeEventListener('dragenter', preventDefaults);
+      document.removeEventListener('dragover', preventDefaults);
+      document.removeEventListener('drop', preventDefaults);
+    };
+  }, [isOpen]);
+
+  // Validate that final date is not before draft date
+  const validateDates = (draftDue, finalDue) => {
+    if (draftDue && finalDue) {
+      const draft = new Date(draftDue);
+      const final = new Date(finalDue);
+      if (final < draft) {
+        return 'Final due date cannot be before draft due date';
+      }
+    }
+    return '';
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const newFormData = { ...formData, [name]: value };
+    setFormData(newFormData);
+
+    // Validate dates when either date field changes
+    if (name === 'draftDue' || name === 'finalDue') {
+      const error = validateDates(newFormData.draftDue, newFormData.finalDue);
+      setDateError(error);
+    }
   };
 
   const handleQuickDate = (field, date) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: format(date, 'yyyy-MM-dd'),
-    }));
+    const formattedDate = format(date, 'yyyy-MM-dd');
+    const newFormData = { ...formData, [field]: formattedDate };
+    setFormData(newFormData);
+
+    // Validate dates
+    const error = validateDates(newFormData.draftDue, newFormData.finalDue);
+    setDateError(error);
   };
 
-  const handleFileUpload = async (e) => {
-    const files = Array.from(e.target.files);
+  const processFiles = (files) => {
     const maxSize = 10 * 1024 * 1024; // 10MB
+    const allowedTypes = ['image/svg+xml', 'image/png', 'image/jpeg', 'application/pdf'];
 
     for (const file of files) {
       if (file.size > maxSize) {
@@ -71,7 +118,6 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
         continue;
       }
 
-      const allowedTypes = ['image/svg+xml', 'image/png', 'image/jpeg', 'application/pdf'];
       if (!allowedTypes.includes(file.type)) {
         alert(`File type "${file.type}" is not supported`);
         continue;
@@ -97,11 +143,55 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
     }
   };
 
+  const handleFileUpload = (e) => {
+    const files = Array.from(e.target.files);
+    processFiles(files);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    processFiles(files);
+  };
+
   const handleRemoveAttachment = (attachmentId) => {
     setFormData((prev) => ({
       ...prev,
       attachments: prev.attachments.filter((a) => a.id !== attachmentId),
     }));
+  };
+
+  const handleDownloadAttachment = (attachment) => {
+    const link = document.createElement('a');
+    link.href = attachment.data;
+    link.download = attachment.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePreviewAttachment = (attachment) => {
+    setPreviewFile(attachment);
   };
 
   const handleSubmit = (e) => {
@@ -135,6 +225,7 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
   const quickDates = getQuickDates();
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
       onClose={onClose}
@@ -264,6 +355,14 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
           </div>
         </div>
 
+        {/* Date validation error */}
+        {dateError && (
+          <div className="flex items-center gap-2 text-danger text-sm bg-danger/10 px-3 py-2 rounded-lg">
+            <span>⚠</span>
+            <span>{dateError}</span>
+          </div>
+        )}
+
         {/* Repeat */}
         <div>
           <label className="block text-sm font-medium text-text-primary mb-2">
@@ -289,46 +388,105 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
           <label className="block text-sm font-medium text-text-primary mb-2">
             Upload Attachments
           </label>
-          <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
+          <div
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+              isDragging
+                ? 'border-primary bg-primary/10'
+                : 'border-border hover:border-primary/50'
+            }`}
+          >
             <input
+              ref={fileInputRef}
               type="file"
-              id="file-upload"
               multiple
               accept=".svg,.png,.jpg,.jpeg,.pdf"
               onChange={handleFileUpload}
               className="hidden"
             />
-            <label htmlFor="file-upload" className="cursor-pointer">
-              <Upload size={32} className="mx-auto text-text-muted mb-2" />
-              <p className="text-sm text-text-secondary">
-                Click to upload or drag and drop
-              </p>
-              <p className="text-xs text-text-muted mt-1">
-                SVG, PNG, JPG or PDF (MAX. 10MB)
-              </p>
-            </label>
+            <Upload size={32} className="mx-auto text-text-muted mb-2" />
+            <p className="text-sm text-text-secondary">
+              Click to upload or drag and drop
+            </p>
+            <p className="text-xs text-text-muted mt-1">
+              SVG, PNG, JPG or PDF (MAX. 10MB)
+            </p>
           </div>
 
           {/* Uploaded files */}
           {formData.attachments.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {formData.attachments.map((attachment) => (
-                <div
-                  key={attachment.id}
-                  className="flex items-center gap-2 bg-surface-hover px-3 py-2 rounded-lg"
-                >
-                  <span className="text-sm text-text-primary truncate max-w-[150px]">
-                    {attachment.name}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveAttachment(attachment.id)}
-                    className="text-text-muted hover:text-danger"
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {formData.attachments.map((attachment) => {
+                const isImage = attachment.type.startsWith('image/');
+                const isPDF = attachment.type === 'application/pdf';
+
+                return (
+                  <div
+                    key={attachment.id}
+                    className="relative group bg-surface-hover rounded-lg overflow-hidden border border-border"
                   >
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
+                    {/* Thumbnail */}
+                    <div
+                      className="aspect-square flex items-center justify-center cursor-pointer"
+                      onClick={() => handlePreviewAttachment(attachment)}
+                    >
+                      {isImage ? (
+                        <img
+                          src={attachment.data}
+                          alt={attachment.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-text-muted">
+                          <FileText size={32} />
+                          <span className="text-xs mt-1">
+                            {isPDF ? 'PDF' : 'File'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Overlay with actions */}
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handlePreviewAttachment(attachment)}
+                        className="p-2 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors"
+                        title="Preview"
+                      >
+                        <Maximize2 size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadAttachment(attachment)}
+                        className="p-2 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors"
+                        title="Download"
+                      >
+                        <Download size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAttachment(attachment.id)}
+                        className="p-2 rounded-lg bg-white/20 hover:bg-danger/80 text-white transition-colors"
+                        title="Remove"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+
+                    {/* Filename */}
+                    <div className="px-2 py-1.5 border-t border-border">
+                      <p className="text-xs text-text-primary truncate" title={attachment.name}>
+                        {attachment.name}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -349,13 +507,23 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
             <Button type="button" variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary">
+            <Button type="submit" variant="primary" disabled={!!dateError}>
               {isEditing ? 'Save Changes' : 'Create Task'}
             </Button>
           </div>
         </div>
       </form>
     </Modal>
+
+    {/* File Preview Modal */}
+    {previewFile && (
+      <FilePreview
+        file={previewFile}
+        onClose={() => setPreviewFile(null)}
+        onDownload={handleDownloadAttachment}
+      />
+    )}
+  </>
   );
 };
 

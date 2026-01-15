@@ -99,21 +99,17 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
       }`}
     >
       {/* Header */}
-      <div className="p-4 border-b border-border flex items-center gap-3">
-        <img
-          src="/assets/mission-control-orange-logo.png"
-          alt="Mission Control"
-          className="w-8 h-8 flex-shrink-0"
-        />
-        {!collapsed && (
-          <div className="flex-1 min-w-0">
-            <h1 className="text-sm font-bold text-text-primary truncate">Mission Control</h1>
-            <p className="text-xs text-text-muted truncate">Colorado Mountain Brewery</p>
-          </div>
-        )}
+      <div className="p-4 border-b border-border flex items-center justify-between">
+        <div className={`flex items-center justify-center ${collapsed ? 'w-8' : 'flex-1'}`}>
+          <img
+            src="/assets/mission-control-orange-logo.png"
+            alt="Mission Control"
+            className={`object-contain ${collapsed ? 'w-8 h-8' : 'h-12 max-w-full'}`}
+          />
+        </div>
         <button
           onClick={toggleCollapse}
-          className="p-1 rounded hover:bg-surface-hover text-text-secondary"
+          className="p-1 rounded hover:bg-surface-hover text-text-secondary flex-shrink-0"
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Upload, X } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
@@ -13,18 +13,48 @@ const FileUploader = ({ isOpen, onClose, onUpload }) => {
   const maxSize = 10 * 1024 * 1024; // 10MB
   const allowedTypes = ['image/svg+xml', 'image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
 
+  // Prevent browser default drag behavior when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const preventDefaults = (e) => {
+      e.preventDefault();
+    };
+
+    // Prevent default drag behaviors on the entire document
+    // This allows drops to work instead of browser trying to open the file
+    document.addEventListener('dragenter', preventDefaults);
+    document.addEventListener('dragover', preventDefaults);
+    document.addEventListener('drop', preventDefaults);
+
+    return () => {
+      document.removeEventListener('dragenter', preventDefaults);
+      document.removeEventListener('dragover', preventDefaults);
+      document.removeEventListener('drop', preventDefaults);
+    };
+  }, [isOpen]);
+
   const handleDragOver = (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     setIsDragging(true);
   };
 
   const handleDragLeave = (e) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(false);
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(false);
     const droppedFiles = Array.from(e.dataTransfer.files);
     processFiles(droppedFiles);
@@ -103,6 +133,7 @@ const FileUploader = ({ isOpen, onClose, onUpload }) => {
         {/* Drop zone */}
         <div
           onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}

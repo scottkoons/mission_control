@@ -98,6 +98,73 @@ export const getNextOccurrence = (baseDate, repeatType, targetMonth) => {
   return format(nextDate, 'yyyy-MM-dd');
 };
 
+// Generate all occurrences within a month for daily/weekly/biweekly
+const generateWithinMonthOccurrences = (template, existingKeys) => {
+  const instances = [];
+  if (!template.draftDue) return instances;
+
+  const baseDate = parseISO(template.draftDue);
+  const baseFinalDate = template.finalDue ? parseISO(template.finalDue) : null;
+  const monthStart = startOfMonth(baseDate);
+  const monthEnd = endOfMonth(baseDate);
+
+  // Calculate the offset between draft and final due dates
+  const dayOffset = baseFinalDate
+    ? Math.round((baseFinalDate - baseDate) / (1000 * 60 * 60 * 24))
+    : 0;
+
+  let interval;
+  switch (template.repeat) {
+    case 'daily':
+      interval = 1;
+      break;
+    case 'weekly':
+      interval = 7;
+      break;
+    case 'biweekly':
+      interval = 14;
+      break;
+    default:
+      return instances;
+  }
+
+  // Start from the first occurrence after the original date
+  let currentDate = addDays(baseDate, interval);
+
+  while (currentDate <= monthEnd) {
+    const draftDue = format(currentDate, 'yyyy-MM-dd');
+    const finalDue = baseFinalDate
+      ? format(addDays(currentDate, dayOffset), 'yyyy-MM-dd')
+      : null;
+
+    const instanceKey = `${template.id}-${draftDue}-${finalDue}`;
+    if (!existingKeys.has(instanceKey)) {
+      instances.push({
+        id: uuidv4(),
+        taskName: template.taskName,
+        notes: template.notes,
+        draftDue,
+        finalDue,
+        draftComplete: false,
+        finalComplete: false,
+        completedAt: null,
+        attachments: [],
+        repeat: 'none',
+        isRecurring: true,
+        recurringParentId: template.id,
+        sortOrder: template.sortOrder,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      existingKeys.add(instanceKey);
+    }
+
+    currentDate = addDays(currentDate, interval);
+  }
+
+  return instances;
+};
+
 // Generate recurring instances for visible months
 export const generateRecurringInstances = (tasks, existingInstances = []) => {
   const monthsWithTasks = getMonthsWithNonRecurringTasks(tasks);
@@ -110,6 +177,16 @@ export const generateRecurringInstances = (tasks, existingInstances = []) => {
   );
 
   templates.forEach((template) => {
+    const repeatType = template.repeat;
+
+    // For daily/weekly/biweekly: generate occurrences within the same month only
+    if (repeatType === 'daily' || repeatType === 'weekly' || repeatType === 'biweekly') {
+      const withinMonthInstances = generateWithinMonthOccurrences(template, existingKeys);
+      newInstances.push(...withinMonthInstances);
+      return;
+    }
+
+    // For monthly/monthly-15th: generate for all months with tasks
     monthsWithTasks.forEach((monthKey) => {
       // Skip if the template's original month matches (the original is already there)
       const templateMonth = template.draftDue ? getMonthKey(template.draftDue) : null;

@@ -70,6 +70,35 @@ export const TaskProvider = ({ children }) => {
 
   // Update an existing task
   const updateTask = useCallback((taskId, updates) => {
+    // Check if task exists in stored tasks
+    const existsInStorage = tasks.find((t) => t.id === taskId);
+
+    // If it's a generated recurring instance, materialize it first
+    if (!existsInStorage) {
+      const generatedTask = tasksWithRecurring.find((t) => t.id === taskId);
+      if (generatedTask) {
+        const materializedTask = {
+          ...generatedTask,
+          ...updates,
+          updatedAt: new Date().toISOString(),
+        };
+
+        // Check completion status
+        if (materializedTask.draftComplete && materializedTask.finalComplete && !generatedTask.completedAt) {
+          materializedTask.completedAt = new Date().toISOString();
+        }
+        if ((!materializedTask.draftComplete || !materializedTask.finalComplete) && generatedTask.completedAt) {
+          materializedTask.completedAt = null;
+        }
+
+        const updatedTasks = [...tasks, materializedTask];
+        setTasks(updatedTasks);
+        storageService.saveTasks(updatedTasks);
+        return;
+      }
+      return; // Task not found
+    }
+
     const updatedTasks = tasks.map((task) => {
       if (task.id === taskId) {
         const updatedTask = {
@@ -95,12 +124,38 @@ export const TaskProvider = ({ children }) => {
 
     setTasks(updatedTasks);
     storageService.saveTasks(updatedTasks);
-  }, [tasks]);
+  }, [tasks, tasksWithRecurring]);
 
   // Delete a task with undo capability
   const deleteTask = useCallback((taskId) => {
-    const taskToDelete = tasks.find((t) => t.id === taskId);
-    if (!taskToDelete) return;
+    let taskToDelete = tasks.find((t) => t.id === taskId);
+
+    // If it's a generated recurring instance, materialize it first so we can delete it
+    if (!taskToDelete) {
+      const generatedTask = tasksWithRecurring.find((t) => t.id === taskId);
+      if (generatedTask) {
+        // Add to storage as completed (this prevents regeneration)
+        const materializedTask = {
+          ...generatedTask,
+          completedAt: new Date().toISOString(), // Mark as completed so it won't regenerate
+        };
+
+        // Save the materialized task as "deleted" (completed)
+        const updatedTasks = [...tasks, materializedTask];
+        setTasks(updatedTasks);
+        storageService.saveTasks(updatedTasks);
+
+        // Show undo toast for generated instance
+        showDeleteToast('Task deleted', () => {
+          // Undo: remove the materialized task so it can regenerate
+          const restoredTasks = tasks.filter((t) => t.id !== taskId);
+          setTasks(restoredTasks);
+          storageService.saveTasks(restoredTasks);
+        });
+        return;
+      }
+      return; // Task not found
+    }
 
     // If deleting a recurring template, also delete all its instances
     let tasksToRemove = [taskId];
@@ -121,11 +176,15 @@ export const TaskProvider = ({ children }) => {
       setTasks(restoredTasks);
       storageService.saveTasks(restoredTasks);
     });
-  }, [tasks, showDeleteToast]);
+  }, [tasks, tasksWithRecurring, showDeleteToast]);
 
   // Duplicate a task
   const duplicateTask = useCallback((taskId) => {
-    const taskToDuplicate = tasks.find((t) => t.id === taskId);
+    // Check both stored and generated tasks
+    let taskToDuplicate = tasks.find((t) => t.id === taskId);
+    if (!taskToDuplicate) {
+      taskToDuplicate = tasksWithRecurring.find((t) => t.id === taskId);
+    }
     if (!taskToDuplicate) return null;
 
     const newTask = {
@@ -137,6 +196,7 @@ export const TaskProvider = ({ children }) => {
       completedAt: null,
       isRecurring: false,
       recurringParentId: null,
+      repeat: 'none', // Duplicated task doesn't inherit repeat
       sortOrder: tasks.length + 1,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -146,7 +206,7 @@ export const TaskProvider = ({ children }) => {
     setTasks(updatedTasks);
     storageService.saveTasks(updatedTasks);
     return newTask;
-  }, [tasks]);
+  }, [tasks, tasksWithRecurring]);
 
   // Toggle draft completion
   const toggleDraftComplete = useCallback((taskId) => {
@@ -165,15 +225,22 @@ export const TaskProvider = ({ children }) => {
   }, [tasks, tasksWithRecurring, updateTask]);
 
   // Toggle final completion
+  // When marking final as complete, also mark draft as complete
   const toggleFinalComplete = useCallback((taskId) => {
     const task = tasksWithRecurring.find((t) => t.id === taskId);
     if (task) {
+      const newFinalComplete = !task.finalComplete;
+      // If marking final complete, also mark draft complete
+      const updates = newFinalComplete
+        ? { finalComplete: true, draftComplete: true }
+        : { finalComplete: false };
+
       if (task.isRecurring && !tasks.find((t) => t.id === taskId)) {
-        const updatedTasks = [...tasks, { ...task, finalComplete: !task.finalComplete }];
+        const updatedTasks = [...tasks, { ...task, ...updates }];
         setTasks(updatedTasks);
         storageService.saveTasks(updatedTasks);
       } else {
-        updateTask(taskId, { finalComplete: !task.finalComplete });
+        updateTask(taskId, updates);
       }
     }
   }, [tasks, tasksWithRecurring, updateTask]);
