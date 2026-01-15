@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Header from '../components/layout/Header';
 import MonthSection from '../components/tasks/MonthSection';
 import FlatView from '../components/tasks/FlatView';
@@ -8,6 +8,7 @@ import { useTasks } from '../context/TaskContext';
 import { storageService } from '../services/storageService';
 import { groupTasksByMonth } from '../utils/dateUtils';
 import { defaultTaskSort } from '../utils/sortUtils';
+import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 
 const Dashboard = ({ currentView, onViewChange }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -17,11 +18,23 @@ const Dashboard = ({ currentView, onViewChange }) => {
   const [defaultMonth, setDefaultMonth] = useState(null);
   const [focusAttachments, setFocusAttachments] = useState(false);
   const { getActiveTasks } = useTasks();
+  const searchInputRef = useRef(null);
 
   useEffect(() => {
     const settings = storageService.getSettings();
     setDateMode(settings.groupedDateMode || 'draft');
   }, []);
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    onAddTask: () => handleAddTask(),
+    onFocusSearch: () => searchInputRef.current?.focus(),
+    onEscape: () => {
+      if (showTaskModal) {
+        handleCloseModal();
+      }
+    },
+  });
 
   const handleDateModeChange = (mode) => {
     setDateMode(mode);
@@ -99,6 +112,7 @@ const Dashboard = ({ currentView, onViewChange }) => {
     <div className="flex-1 flex flex-col overflow-hidden">
       {currentView !== 'calendar' && (
         <Header
+          ref={searchInputRef}
           title={getTitle()}
           showDateToggle={currentView === 'grouped'}
           dateMode={dateMode}
@@ -119,7 +133,7 @@ const Dashboard = ({ currentView, onViewChange }) => {
                   {searchQuery ? 'No tasks match your search' : 'No tasks yet'}
                 </p>
                 <p className="text-sm text-text-muted mt-2">
-                  Click "Add New Task" to create your first task
+                  Click "Add New Task" or press Cmd+N to create your first task
                 </p>
               </div>
             ) : (

@@ -1,6 +1,7 @@
+import { forwardRef } from 'react';
 import { Search, Plus } from 'lucide-react';
 
-const Header = ({
+const Header = forwardRef(({
   title,
   showDateToggle,
   dateMode,
@@ -10,7 +11,7 @@ const Header = ({
   onSearchChange,
   onAddTask,
   children,
-}) => {
+}, ref) => {
   return (
     <header className="bg-surface border-b border-border px-6 py-4">
       <div className="flex items-center justify-between gap-4">
@@ -42,8 +43,9 @@ const Header = ({
                 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-muted"
               />
               <input
+                ref={ref}
                 type="text"
-                placeholder="Search..."
+                placeholder="Search... (Cmd+K)"
                 value={searchValue}
                 onChange={(e) => onSearchChange(e.target.value)}
                 className="bg-surface-hover border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary w-64"
@@ -56,6 +58,7 @@ const Header = ({
             <button
               onClick={onAddTask}
               className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              title="Add New Task (Cmd+N)"
             >
               <Plus size={18} />
               <span>Add New Task</span>
@@ -65,6 +68,8 @@ const Header = ({
       </div>
     </header>
   );
-};
+});
+
+Header.displayName = 'Header';
 
 export default Header;
