@@ -1,11 +1,38 @@
 import { useState } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
-import TaskRow from './TaskRow';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import SortableTaskRow from './SortableTaskRow';
 import { multiSort, SORT_ASC, SORT_DESC, toggleDirection } from '../../utils/sortUtils';
+import { useTasks } from '../../context/TaskContext';
 
-const TaskTable = ({ tasks, onEditTask, onReorder }) => {
+const TaskTable = ({ tasks, onEditTask }) => {
   const [sortField, setSortField] = useState(null);
   const [sortDirection, setSortDirection] = useState(SORT_ASC);
+  const { updateSortOrder } = useTasks();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -19,6 +46,17 @@ const TaskTable = ({ tasks, onEditTask, onReorder }) => {
   const sortedTasks = sortField
     ? multiSort(tasks, [{ field: sortField, direction: sortDirection }])
     : tasks;
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+
+    if (active.id !== over?.id) {
+      const oldIndex = sortedTasks.findIndex((t) => t.id === active.id);
+      const newIndex = sortedTasks.findIndex((t) => t.id === over.id);
+      const newOrder = arrayMove(sortedTasks, oldIndex, newIndex);
+      updateSortOrder(newOrder.map((t) => t.id));
+    }
+  };
 
   const SortHeader = ({ field, children }) => (
     <th
@@ -48,30 +86,40 @@ const TaskTable = ({ tasks, onEditTask, onReorder }) => {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-border">
-            <th className="w-8 px-2"></th>
-            <SortHeader field="taskName">Task Name</SortHeader>
-            <SortHeader field="notes">Notes</SortHeader>
-            <SortHeader field="draftDue">Draft Due</SortHeader>
-            <SortHeader field="finalDue">Final Due</SortHeader>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">
-              Info
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {sortedTasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              onEdit={onEditTask}
-              dragHandleProps={{}}
-            />
-          ))}
-        </tbody>
-      </table>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="w-8 px-2"></th>
+              <SortHeader field="taskName">Task Name</SortHeader>
+              <SortHeader field="notes">Notes</SortHeader>
+              <SortHeader field="draftDue">Draft Due</SortHeader>
+              <SortHeader field="finalDue">Final Due</SortHeader>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">
+                Info
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <SortableContext
+              items={sortedTasks.map((t) => t.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {sortedTasks.map((task) => (
+                <SortableTaskRow
+                  key={task.id}
+                  task={task}
+                  onEdit={onEditTask}
+                />
+              ))}
+            </SortableContext>
+          </tbody>
+        </table>
+      </DndContext>
     </div>
   );
 };
