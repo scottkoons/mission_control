@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import Header from '../components/layout/Header';
 import MonthSection from '../components/tasks/MonthSection';
+import FlatView from '../components/tasks/FlatView';
+import CalendarView from '../components/calendar/CalendarView';
 import TaskModal from '../components/tasks/TaskModal';
 import { useTasks } from '../context/TaskContext';
 import { storageService } from '../services/storageService';
-import { groupTasksByMonth, getMonthKey } from '../utils/dateUtils';
+import { groupTasksByMonth } from '../utils/dateUtils';
 import { defaultTaskSort } from '../utils/sortUtils';
 
 const Dashboard = ({ currentView, onViewChange }) => {
@@ -88,20 +90,27 @@ const Dashboard = ({ currentView, onViewChange }) => {
     setFocusAttachments(false);
   };
 
+  const handleExportPDF = (type) => {
+    // Will be implemented in Phase 7
+    console.log('Export PDF:', type);
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <Header
-        title={getTitle()}
-        showDateToggle={currentView === 'grouped'}
-        dateMode={dateMode}
-        onDateModeChange={handleDateModeChange}
-        showSearch={currentView !== 'calendar'}
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        onAddTask={() => handleAddTask()}
-      />
+      {currentView !== 'calendar' && (
+        <Header
+          title={getTitle()}
+          showDateToggle={currentView === 'grouped'}
+          dateMode={dateMode}
+          onDateModeChange={handleDateModeChange}
+          showSearch={true}
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          onAddTask={() => handleAddTask()}
+        />
+      )}
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className={`flex-1 overflow-y-auto p-6 ${currentView === 'calendar' ? 'flex flex-col' : ''}`}>
         {currentView === 'grouped' && (
           <>
             {monthKeys.length === 0 ? (
@@ -128,17 +137,18 @@ const Dashboard = ({ currentView, onViewChange }) => {
         )}
 
         {currentView === 'flat' && (
-          <div className="text-text-secondary text-center py-12">
-            <p className="text-lg">Flat View</p>
-            <p className="text-sm mt-2">Phase 4 will implement the flat task list</p>
-          </div>
+          <FlatView
+            tasks={filteredTasks}
+            onEditTask={handleEditTask}
+          />
         )}
 
         {currentView === 'calendar' && (
-          <div className="text-text-secondary text-center py-12">
-            <p className="text-lg">Calendar View</p>
-            <p className="text-sm mt-2">Phase 4 will implement the calendar grid</p>
-          </div>
+          <CalendarView
+            tasks={activeTasks}
+            onEditTask={handleEditTask}
+            onExportPDF={handleExportPDF}
+          />
         )}
       </div>
 
