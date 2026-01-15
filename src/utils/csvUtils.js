@@ -2,30 +2,28 @@ import { formatDateForCSV, parseDateFromCSV } from './dateUtils';
 
 // CSV Export
 export const exportTasksToCSV = (tasks, monthlyNotes = {}) => {
-  // Headers
+  // Headers - simplified: only essential fields
   const headers = [
     'task_name',
     'notes',
     'draft_due',
     'final_due',
-    'draft_complete',
-    'final_complete',
-    'repeat',
-    'sort_order',
-    'created_at',
   ];
 
+  // Sort tasks by draft_due date (null dates at the end)
+  const sortedTasks = [...tasks].sort((a, b) => {
+    if (!a.draftDue && !b.draftDue) return 0;
+    if (!a.draftDue) return 1;
+    if (!b.draftDue) return -1;
+    return new Date(a.draftDue) - new Date(b.draftDue);
+  });
+
   // Convert tasks to CSV rows
-  const rows = tasks.map((task) => [
+  const rows = sortedTasks.map((task) => [
     escapeCSV(task.taskName || ''),
     escapeCSV(task.notes || ''),
     formatDateForCSV(task.draftDue),
     formatDateForCSV(task.finalDue),
-    task.draftComplete ? 'TRUE' : 'FALSE',
-    task.finalComplete ? 'TRUE' : 'FALSE',
-    task.repeat || 'none',
-    task.sortOrder || '',
-    task.createdAt || '',
   ]);
 
   // Build CSV content
@@ -73,23 +71,13 @@ export const generateCSVTemplate = () => {
     'notes',
     'draft_due',
     'final_due',
-    'draft_complete',
-    'final_complete',
-    'repeat',
-    'sort_order',
-    'created_at',
   ];
 
   const exampleRow = [
     'Example Task',
-    'Task description here',
+    'Task description here (optional)',
     '01/15/2026',
     '01/22/2026',
-    'FALSE',
-    'FALSE',
-    'none',
-    '1',
-    '',
   ];
 
   return headers.join(',') + '\n' + exampleRow.join(',');
@@ -119,8 +107,14 @@ export const parseCSV = (content) => {
     const values = parseCSVLine(line);
 
     if (parsingTasks) {
-      // Parse task row
-      const task = {};
+      // Parse task row - only task_name is required
+      const task = {
+        // Set defaults for fields not in CSV
+        draftComplete: false,
+        finalComplete: false,
+        repeat: 'none',
+      };
+
       headers.forEach((header, index) => {
         const value = values[index] || '';
         switch (header.toLowerCase()) {
@@ -136,24 +130,10 @@ export const parseCSV = (content) => {
           case 'final_due':
             task.finalDue = parseDateFromCSV(value);
             break;
-          case 'draft_complete':
-            task.draftComplete = value.toUpperCase() === 'TRUE';
-            break;
-          case 'final_complete':
-            task.finalComplete = value.toUpperCase() === 'TRUE';
-            break;
-          case 'repeat':
-            task.repeat = value || 'none';
-            break;
-          case 'sort_order':
-            task.sortOrder = parseInt(value) || 0;
-            break;
-          case 'created_at':
-            task.createdAt = value || new Date().toISOString();
-            break;
         }
       });
 
+      // Only add task if it has a name
       if (task.taskName) {
         tasks.push(task);
       }
