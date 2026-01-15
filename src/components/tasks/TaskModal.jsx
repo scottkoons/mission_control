@@ -74,6 +74,43 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
     };
   }, [isOpen]);
 
+  // Handle clipboard paste for screenshots
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePaste = (e) => {
+      // Don't intercept paste if user is typing in a text field
+      const activeElement = document.activeElement;
+      if (activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const blob = item.getAsFile();
+          if (blob) {
+            // Generate a filename with timestamp
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const extension = item.type.split('/')[1] || 'png';
+            const fileName = `screenshot-${timestamp}.${extension}`;
+
+            // Create a new File with a proper name
+            const file = new File([blob], fileName, { type: item.type });
+            processFiles([file]);
+          }
+          break;
+        }
+      }
+    };
+
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, [isOpen]);
+
   // Validate that final date is not before draft date
   const validateDates = (draftDue, finalDue) => {
     if (draftDue && finalDue) {
@@ -410,7 +447,7 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
             />
             <Upload size={32} className="mx-auto text-text-muted mb-2" />
             <p className="text-sm text-text-secondary">
-              Click to upload or drag and drop
+              Click to upload, drag and drop, or paste a screenshot
             </p>
             <p className="text-xs text-text-muted mt-1">
               SVG, PNG, JPG or PDF (MAX. 10MB)
