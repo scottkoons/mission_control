@@ -5,11 +5,18 @@ import Dashboard from './pages/Dashboard';
 import Completed from './pages/Completed';
 import FileCabinet from './pages/FileCabinet';
 import ToastContainer from './components/common/Toast';
+import CSVImport from './components/export/CSVImport';
 import { storageService } from './services/storageService';
+import { useTasks } from './context/TaskContext';
+import { useToast } from './context/ToastContext';
+import { exportTasksToCSV, downloadCSV } from './utils/csvUtils';
+import { exportPDFFlat, exportPDFGrouped } from './utils/pdfUtils';
 
 function App() {
   const [currentView, setCurrentView] = useState('grouped');
   const [showImportModal, setShowImportModal] = useState(false);
+  const { tasks, monthlyNotes } = useTasks();
+  const { addToast } = useToast();
 
   useEffect(() => {
     const settings = storageService.getSettings();
@@ -22,13 +29,33 @@ function App() {
   };
 
   const handleExportPDF = (type) => {
-    // Will be implemented in Phase 7
-    console.log('Export PDF:', type);
+    try {
+      const settings = storageService.getSettings();
+      const dateMode = settings.groupedDateMode || 'draft';
+
+      if (type === 'flat') {
+        exportPDFFlat(tasks);
+        addToast('PDF (Flat) exported successfully', { type: 'success', duration: 3000 });
+      } else if (type === 'grouped') {
+        exportPDFGrouped(tasks, monthlyNotes, dateMode);
+        addToast('PDF (Grouped) exported successfully', { type: 'success', duration: 3000 });
+      }
+    } catch (error) {
+      console.error('PDF export error:', error);
+      addToast('Error exporting PDF', { type: 'error' });
+    }
   };
 
   const handleExportCSV = () => {
-    // Will be implemented in Phase 7
-    console.log('Export CSV');
+    try {
+      const csv = exportTasksToCSV(tasks, monthlyNotes);
+      const filename = `mission-control-tasks-${new Date().toISOString().split('T')[0]}.csv`;
+      downloadCSV(csv, filename);
+      addToast('CSV exported successfully', { type: 'success', duration: 3000 });
+    } catch (error) {
+      console.error('CSV export error:', error);
+      addToast('Error exporting CSV', { type: 'error' });
+    }
   };
 
   const handleImportCSV = () => {
@@ -58,6 +85,10 @@ function App() {
         </Routes>
       </Layout>
       <ToastContainer />
+      <CSVImport
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+      />
     </>
   );
 }

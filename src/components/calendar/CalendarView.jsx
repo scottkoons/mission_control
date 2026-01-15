@@ -1,13 +1,16 @@
 import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import CalendarGrid from './CalendarGrid';
 import { useTheme } from '../../context/ThemeContext';
+import { useToast } from '../../context/ToastContext';
+import { exportPDFCalendar } from '../../utils/pdfUtils';
 
-const CalendarView = ({ tasks, onEditTask, onExportPDF }) => {
+const CalendarView = ({ tasks, onEditTask }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dateFilter, setDateFilter] = useState('all'); // 'draft' | 'final' | 'all'
   const { theme } = useTheme();
+  const { addToast } = useToast();
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
@@ -43,6 +46,18 @@ const CalendarView = ({ tasks, onEditTask, onExportPDF }) => {
 
   const handleToday = () => {
     setCurrentDate(new Date());
+  };
+
+  const handleExportPDF = () => {
+    try {
+      // Filter out completed and unscheduled tasks for PDF
+      const pdfTasks = tasks.filter((t) => !t.completedAt && (t.draftDue || t.finalDue));
+      exportPDFCalendar(pdfTasks, dateFilter);
+      addToast('Calendar PDF exported successfully', { type: 'success', duration: 3000 });
+    } catch (error) {
+      console.error('PDF export error:', error);
+      addToast('Error exporting calendar PDF', { type: 'error' });
+    }
   };
 
   return (
@@ -112,7 +127,7 @@ const CalendarView = ({ tasks, onEditTask, onExportPDF }) => {
 
           {/* Download PDF Button */}
           <button
-            onClick={() => onExportPDF('calendar')}
+            onClick={handleExportPDF}
             className="flex items-center gap-2 px-4 py-2 bg-surface-hover hover:bg-border rounded-lg text-sm text-text-secondary hover:text-text-primary transition-colors"
           >
             <Download size={16} />

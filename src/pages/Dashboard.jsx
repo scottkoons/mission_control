@@ -103,10 +103,6 @@ const Dashboard = ({ currentView, onViewChange }) => {
     setFocusAttachments(false);
   };
 
-  const handleExportPDF = (type) => {
-    // Will be implemented in Phase 7
-    console.log('Export PDF:', type);
-  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -161,7 +157,6 @@ const Dashboard = ({ currentView, onViewChange }) => {
           <CalendarView
             tasks={activeTasks}
             onEditTask={handleEditTask}
-            onExportPDF={handleExportPDF}
           />
         )}
       </div>
