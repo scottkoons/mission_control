@@ -1,7 +1,8 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { storageService } from '../services/storageService';
 import { useToast } from './ToastContext';
+import { generateRecurringInstances } from '../services/recurringService';
 
 const TaskContext = createContext();
 
@@ -28,23 +29,36 @@ export const TaskProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
+  // Generate recurring instances based on current tasks
+  const tasksWithRecurring = useMemo(() => {
+    // Get non-recurring tasks for reference
+    const regularTasks = tasks.filter((t) => !t.isRecurring);
+    const existingInstances = tasks.filter((t) => t.isRecurring);
+
+    // Generate new recurring instances
+    const newInstances = generateRecurringInstances(regularTasks, existingInstances);
+
+    // Combine regular tasks with existing and new instances
+    return [...tasks, ...newInstances];
+  }, [tasks]);
+
   // Create a new task
   const createTask = useCallback((taskData) => {
     const newTask = {
-      id: uuidv4(),
+      id: taskData.id || uuidv4(),
       taskName: taskData.taskName || '',
       notes: taskData.notes || '',
       draftDue: taskData.draftDue || null,
       finalDue: taskData.finalDue || null,
-      draftComplete: false,
-      finalComplete: false,
-      completedAt: null,
+      draftComplete: taskData.draftComplete || false,
+      finalComplete: taskData.finalComplete || false,
+      completedAt: taskData.completedAt || null,
       attachments: taskData.attachments || [],
       repeat: taskData.repeat || 'none',
-      isRecurring: false,
-      recurringParentId: null,
-      sortOrder: tasks.length + 1,
-      createdAt: new Date().toISOString(),
+      isRecurring: taskData.isRecurring || false,
+      recurringParentId: taskData.recurringParentId || null,
+      sortOrder: taskData.sortOrder || tasks.length + 1,
+      createdAt: taskData.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
@@ -88,14 +102,22 @@ export const TaskProvider = ({ children }) => {
     const taskToDelete = tasks.find((t) => t.id === taskId);
     if (!taskToDelete) return;
 
-    const updatedTasks = tasks.filter((t) => t.id !== taskId);
+    // If deleting a recurring template, also delete all its instances
+    let tasksToRemove = [taskId];
+    if (taskToDelete.repeat && taskToDelete.repeat !== 'none') {
+      const instances = tasks.filter((t) => t.recurringParentId === taskId);
+      tasksToRemove = [...tasksToRemove, ...instances.map((t) => t.id)];
+    }
+
+    const updatedTasks = tasks.filter((t) => !tasksToRemove.includes(t.id));
     setTasks(updatedTasks);
     storageService.saveTasks(updatedTasks);
 
     // Show undo toast
+    const deletedTasks = tasks.filter((t) => tasksToRemove.includes(t.id));
     showDeleteToast('Task deleted', () => {
-      // Undo function - restore the task
-      const restoredTasks = [...updatedTasks, taskToDelete];
+      // Undo function - restore the tasks
+      const restoredTasks = [...updatedTasks, ...deletedTasks];
       setTasks(restoredTasks);
       storageService.saveTasks(restoredTasks);
     });
@@ -113,6 +135,8 @@ export const TaskProvider = ({ children }) => {
       draftComplete: false,
       finalComplete: false,
       completedAt: null,
+      isRecurring: false,
+      recurringParentId: null,
       sortOrder: tasks.length + 1,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -126,19 +150,33 @@ export const TaskProvider = ({ children }) => {
 
   // Toggle draft completion
   const toggleDraftComplete = useCallback((taskId) => {
-    const task = tasks.find((t) => t.id === taskId);
+    // Find in regular tasks or generated recurring instances
+    const task = tasksWithRecurring.find((t) => t.id === taskId);
     if (task) {
-      updateTask(taskId, { draftComplete: !task.draftComplete });
+      // If it's a generated recurring instance, save it first
+      if (task.isRecurring && !tasks.find((t) => t.id === taskId)) {
+        const updatedTasks = [...tasks, { ...task, draftComplete: !task.draftComplete }];
+        setTasks(updatedTasks);
+        storageService.saveTasks(updatedTasks);
+      } else {
+        updateTask(taskId, { draftComplete: !task.draftComplete });
+      }
     }
-  }, [tasks, updateTask]);
+  }, [tasks, tasksWithRecurring, updateTask]);
 
   // Toggle final completion
   const toggleFinalComplete = useCallback((taskId) => {
-    const task = tasks.find((t) => t.id === taskId);
+    const task = tasksWithRecurring.find((t) => t.id === taskId);
     if (task) {
-      updateTask(taskId, { finalComplete: !task.finalComplete });
+      if (task.isRecurring && !tasks.find((t) => t.id === taskId)) {
+        const updatedTasks = [...tasks, { ...task, finalComplete: !task.finalComplete }];
+        setTasks(updatedTasks);
+        storageService.saveTasks(updatedTasks);
+      } else {
+        updateTask(taskId, { finalComplete: !task.finalComplete });
+      }
     }
-  }, [tasks, updateTask]);
+  }, [tasks, tasksWithRecurring, updateTask]);
 
   // Update sort order
   const updateSortOrder = useCallback((taskIds) => {
@@ -161,10 +199,10 @@ export const TaskProvider = ({ children }) => {
     storageService.saveMonthlyNotes(monthKey, notes);
   }, [monthlyNotes]);
 
-  // Get active (incomplete) tasks
+  // Get active (incomplete) tasks including recurring
   const getActiveTasks = useCallback(() => {
-    return tasks.filter((t) => !t.completedAt);
-  }, [tasks]);
+    return tasksWithRecurring.filter((t) => !t.completedAt);
+  }, [tasksWithRecurring]);
 
   // Get completed tasks
   const getCompletedTasks = useCallback(() => {
@@ -176,7 +214,7 @@ export const TaskProvider = ({ children }) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    return tasks.filter((task) => {
+    return tasksWithRecurring.filter((task) => {
       if (task.completedAt) return false;
 
       const checkDate = (dateStr, isComplete) => {
@@ -188,10 +226,10 @@ export const TaskProvider = ({ children }) => {
 
       return checkDate(task.draftDue, task.draftComplete) || checkDate(task.finalDue, task.finalComplete);
     }).length;
-  }, [tasks]);
+  }, [tasksWithRecurring]);
 
   const value = {
-    tasks,
+    tasks: tasksWithRecurring,
     monthlyNotes,
     loading,
     createTask,
