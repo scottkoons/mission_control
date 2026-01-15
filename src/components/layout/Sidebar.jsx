@@ -24,10 +24,11 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { getOverdueCount } = useTasks();
+  const { getOverdueCount, getDueSoonCount } = useTasks();
   const { currentTheme, cycleTheme, themes } = useTheme();
 
   const overdueCount = getOverdueCount();
+  const dueSoonCount = getDueSoonCount();
 
   useEffect(() => {
     const settings = storageService.getSettings();
@@ -51,7 +52,7 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
     }
   };
 
-  const NavItem = ({ icon: Icon, label, badge, onClick, isActive, danger }) => (
+  const NavItem = ({ icon: Icon, label, overdueBadge, dueSoonBadge, onClick, isActive, danger }) => (
     <button
       onClick={onClick}
       className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
@@ -65,17 +66,45 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
       {!collapsed && (
         <>
           <span className="flex-1 text-left text-sm font-medium">{label}</span>
-          {badge !== undefined && badge > 0 && (
-            <span className="bg-danger text-white text-xs px-2 py-0.5 rounded-full">
-              {badge}
-            </span>
-          )}
+          <div className="flex items-center gap-1">
+            {dueSoonBadge?.count > 0 && (
+              <span
+                className="bg-warning text-black text-xs px-2 py-0.5 rounded-full"
+                title={dueSoonBadge.tooltip}
+              >
+                {dueSoonBadge.count}
+              </span>
+            )}
+            {overdueBadge?.count > 0 && (
+              <span
+                className="bg-danger text-white text-xs px-2 py-0.5 rounded-full"
+                title={overdueBadge.tooltip}
+              >
+                {overdueBadge.count}
+              </span>
+            )}
+          </div>
         </>
       )}
-      {collapsed && badge !== undefined && badge > 0 && (
-        <span className="absolute top-0 right-0 bg-danger text-white text-xs w-4 h-4 flex items-center justify-center rounded-full transform translate-x-1/2 -translate-y-1/2">
-          {badge > 9 ? '9+' : badge}
-        </span>
+      {collapsed && (overdueBadge?.count > 0 || dueSoonBadge?.count > 0) && (
+        <div className="absolute top-0 right-0 flex gap-0.5 transform translate-x-1/2 -translate-y-1/2">
+          {dueSoonBadge?.count > 0 && (
+            <span
+              className="bg-warning text-black text-xs w-4 h-4 flex items-center justify-center rounded-full"
+              title={dueSoonBadge.tooltip}
+            >
+              {dueSoonBadge.count > 9 ? '9+' : dueSoonBadge.count}
+            </span>
+          )}
+          {overdueBadge?.count > 0 && (
+            <span
+              className="bg-danger text-white text-xs w-4 h-4 flex items-center justify-center rounded-full"
+              title={overdueBadge.tooltip}
+            >
+              {overdueBadge.count > 9 ? '9+' : overdueBadge.count}
+            </span>
+          )}
+        </div>
       )}
     </button>
   );
@@ -123,7 +152,14 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
           <NavItem
             icon={LayoutDashboard}
             label="Dashboard"
-            badge={overdueCount}
+            overdueBadge={{
+              count: overdueCount,
+              tooltip: `${overdueCount} date${overdueCount === 1 ? '' : 's'} overdue`
+            }}
+            dueSoonBadge={{
+              count: dueSoonCount,
+              tooltip: `${dueSoonCount} date${dueSoonCount === 1 ? '' : 's'} due soon`
+            }}
             onClick={() => navigate('/')}
             isActive={isOnDashboard}
           />

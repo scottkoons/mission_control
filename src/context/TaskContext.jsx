@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { storageService } from '../services/storageService';
 import { useToast } from './ToastContext';
 import { generateRecurringInstances } from '../services/recurringService';
+import { getDateStatus } from '../utils/dateUtils';
 
 const TaskContext = createContext();
 
@@ -276,23 +277,42 @@ export const TaskProvider = ({ children }) => {
     return tasks.filter((t) => t.completedAt);
   }, [tasks]);
 
-  // Get overdue tasks count
+  // Get overdue dates count - uses same logic as DateBadge display
   const getOverdueCount = useCallback(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    let count = 0;
+    tasksWithRecurring.forEach((task) => {
+      if (task.completedAt) return;
 
-    return tasksWithRecurring.filter((task) => {
-      if (task.completedAt) return false;
+      // Check draft date status
+      if (task.draftDue && getDateStatus(task.draftDue, task.draftComplete) === 'overdue') {
+        count++;
+      }
+      // Check final date status
+      if (task.finalDue && getDateStatus(task.finalDue, task.finalComplete) === 'overdue') {
+        count++;
+      }
+    });
 
-      const checkDate = (dateStr, isComplete) => {
-        if (!dateStr || isComplete) return false;
-        const date = new Date(dateStr);
-        date.setHours(0, 0, 0, 0);
-        return date < today;
-      };
+    return count;
+  }, [tasksWithRecurring]);
 
-      return checkDate(task.draftDue, task.draftComplete) || checkDate(task.finalDue, task.finalComplete);
-    }).length;
+  // Get due soon dates count - uses same logic as DateBadge display
+  const getDueSoonCount = useCallback(() => {
+    let count = 0;
+    tasksWithRecurring.forEach((task) => {
+      if (task.completedAt) return;
+
+      // Check draft date status
+      if (task.draftDue && getDateStatus(task.draftDue, task.draftComplete) === 'soon') {
+        count++;
+      }
+      // Check final date status
+      if (task.finalDue && getDateStatus(task.finalDue, task.finalComplete) === 'soon') {
+        count++;
+      }
+    });
+
+    return count;
   }, [tasksWithRecurring]);
 
   const value = {
@@ -310,6 +330,7 @@ export const TaskProvider = ({ children }) => {
     getActiveTasks,
     getCompletedTasks,
     getOverdueCount,
+    getDueSoonCount,
   };
 
   return (

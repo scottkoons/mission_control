@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { GripVertical, Trash2, Paperclip } from 'lucide-react';
 import DateBadge from './DateBadge';
+import ConfirmModal from '../common/ConfirmModal';
 import { useTasks } from '../../context/TaskContext';
 
 const CompletedTaskRow = ({ task, onEdit }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { toggleDraftComplete, toggleFinalComplete, deleteTask } = useTasks();
 
   const hasAttachments = task.attachments && task.attachments.length > 0;
@@ -13,8 +15,12 @@ const CompletedTaskRow = ({ task, onEdit }) => {
     onEdit(task);
   };
 
-  const handleDelete = (e) => {
+  const handleDeleteClick = (e) => {
     e.stopPropagation();
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = () => {
     deleteTask(task.id);
   };
 
@@ -75,7 +81,7 @@ const CompletedTaskRow = ({ task, onEdit }) => {
             </span>
           )}
           <button
-            onClick={handleDelete}
+            onClick={handleDeleteClick}
             className="p-1 rounded text-text-muted hover:text-danger transition-colors"
             title="Delete task"
           >
@@ -83,6 +89,18 @@ const CompletedTaskRow = ({ task, onEdit }) => {
           </button>
         </div>
       </td>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Task"
+        message={`Are you sure you want to delete "${task.taskName || 'Untitled Task'}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </tr>
   );
 };
