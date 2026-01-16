@@ -11,6 +11,7 @@ import {
   saveTasks,
   deleteTaskFromDB,
   saveMonthlyNote,
+  uploadAttachment,
 } from '../services/firebaseService';
 
 const TaskContext = createContext();
@@ -66,6 +67,35 @@ export const TaskProvider = ({ children }) => {
     return [...tasks, ...newInstances];
   }, [tasks]);
 
+  // Helper to process attachments - upload to Storage and return metadata
+  const processAttachments = async (taskId, attachments) => {
+    const processedAttachments = [];
+    for (const attachment of attachments) {
+      // If attachment already has storageURL, it's already uploaded
+      if (attachment.storageURL) {
+        processedAttachments.push(attachment);
+      } else if (attachment.data) {
+        // New attachment with base64 data - upload to Storage
+        try {
+          const uploaded = await uploadAttachment(user.uid, taskId, attachment);
+          processedAttachments.push(uploaded);
+        } catch (error) {
+          console.error('Error uploading attachment:', error);
+          // Keep the attachment without uploading if it fails
+          processedAttachments.push({
+            id: attachment.id,
+            name: attachment.name,
+            type: attachment.type,
+            size: attachment.size,
+            uploadedAt: attachment.uploadedAt,
+            error: 'Failed to upload',
+          });
+        }
+      }
+    }
+    return processedAttachments;
+  };
+
   // Create a new task
   const createTask = useCallback(async (taskData) => {
     if (!user) {
@@ -73,8 +103,15 @@ export const TaskProvider = ({ children }) => {
       return null;
     }
 
+    const taskId = taskData.id || uuidv4();
+
+    // Process attachments - upload to Firebase Storage
+    const processedAttachments = taskData.attachments?.length > 0
+      ? await processAttachments(taskId, taskData.attachments)
+      : [];
+
     const newTask = {
-      id: taskData.id || uuidv4(),
+      id: taskId,
       taskName: taskData.taskName || '',
       notes: taskData.notes || '',
       draftDue: taskData.draftDue || null,
@@ -82,7 +119,7 @@ export const TaskProvider = ({ children }) => {
       draftComplete: taskData.draftComplete || false,
       finalComplete: taskData.finalComplete || false,
       completedAt: taskData.completedAt || null,
-      attachments: taskData.attachments || [],
+      attachments: processedAttachments,
       repeat: taskData.repeat || 'none',
       isRecurring: taskData.isRecurring || false,
       recurringParentId: taskData.recurringParentId || null,
@@ -104,6 +141,12 @@ export const TaskProvider = ({ children }) => {
   const updateTask = useCallback(async (taskId, updates) => {
     if (!user) return;
 
+    // Process attachments if they're being updated
+    let processedUpdates = { ...updates };
+    if (updates.attachments?.length > 0) {
+      processedUpdates.attachments = await processAttachments(taskId, updates.attachments);
+    }
+
     const existsInStorage = tasks.find((t) => t.id === taskId);
 
     if (!existsInStorage) {
@@ -111,7 +154,7 @@ export const TaskProvider = ({ children }) => {
       if (generatedTask) {
         const materializedTask = {
           ...generatedTask,
-          ...updates,
+          ...processedUpdates,
           updatedAt: new Date().toISOString(),
         };
 
@@ -131,7 +174,7 @@ export const TaskProvider = ({ children }) => {
     const task = tasks.find((t) => t.id === taskId);
     const updatedTask = {
       ...task,
-      ...updates,
+      ...processedUpdates,
       updatedAt: new Date().toISOString(),
     };
 
