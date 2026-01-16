@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Completed from './pages/Completed';
 import FileCabinet from './pages/FileCabinet';
 import Contacts from './pages/Contacts';
+import Categories from './pages/Categories';
 import Login from './pages/Login';
 import ToastContainer from './components/common/Toast';
 import CSVImport from './components/export/CSVImport';
@@ -12,7 +13,9 @@ import { useTasks } from './context/TaskContext';
 import { useToast } from './context/ToastContext';
 import { useAuth } from './context/AuthContext';
 import { exportTasksToCSV, downloadCSV } from './utils/csvUtils';
-import { exportPDFFlat, exportPDFGrouped } from './utils/pdfUtils';
+import { exportPDFFlat, exportPDFGrouped, exportPDFByCompany, exportPDFByCategory } from './utils/pdfUtils';
+import { useCompanies } from './context/CompanyContext';
+import { useCategories } from './context/CategoryContext';
 
 function App() {
   const [currentView, setCurrentView] = useState('grouped');
@@ -20,6 +23,8 @@ function App() {
   const { tasks, monthlyNotes } = useTasks();
   const { addToast } = useToast();
   const { user, loading: authLoading } = useAuth();
+  const { companies } = useCompanies();
+  const { categories } = useCategories();
 
   useEffect(() => {
     // Load settings from localStorage (still used for UI preferences)
@@ -49,6 +54,12 @@ function App() {
       } else if (type === 'grouped') {
         exportPDFGrouped(tasks, monthlyNotes, dateMode);
         addToast('PDF (Grouped) exported successfully', { type: 'success', duration: 3000 });
+      } else if (type === 'company') {
+        exportPDFByCompany(tasks, companies);
+        addToast('PDF (By Company) exported successfully', { type: 'success', duration: 3000 });
+      } else if (type === 'category') {
+        exportPDFByCategory(tasks, categories);
+        addToast('PDF (By Category) exported successfully', { type: 'success', duration: 3000 });
       }
     } catch (error) {
       console.error('PDF export error:', error);
@@ -112,6 +123,7 @@ function App() {
           <Route path="/completed" element={<Completed />} />
           <Route path="/files" element={<FileCabinet />} />
           <Route path="/contacts" element={<Contacts />} />
+          <Route path="/categories" element={<Categories />} />
         </Routes>
       </Layout>
       <ToastContainer />

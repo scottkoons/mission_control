@@ -7,10 +7,16 @@ import { getDateStatus } from '../utils/dateUtils';
 import {
   subscribeTasks,
   subscribeMonthlyNotes,
+  subscribeCompanyNotes,
+  subscribeCategoryNotes,
+  subscribeGeneralNotes,
   saveTask,
   saveTasks,
   deleteTaskFromDB,
   saveMonthlyNote,
+  saveCompanyNote,
+  saveCategoryNote,
+  saveGeneralNote,
   uploadAttachment,
 } from '../services/firebaseService';
 
@@ -27,6 +33,9 @@ export const useTasks = () => {
 export const TaskProvider = ({ children }) => {
   const [tasks, setTasks] = useState([]);
   const [monthlyNotes, setMonthlyNotes] = useState({});
+  const [companyNotes, setCompanyNotes] = useState({});
+  const [categoryNotes, setCategoryNotes] = useState({});
+  const [generalNotes, setGeneralNotes] = useState({});
   const [loading, setLoading] = useState(true);
   const { showDeleteToast } = useToast();
   const { user } = useAuth();
@@ -36,6 +45,9 @@ export const TaskProvider = ({ children }) => {
     if (!user) {
       setTasks([]);
       setMonthlyNotes({});
+      setCompanyNotes({});
+      setCategoryNotes({});
+      setGeneralNotes({});
       setLoading(false);
       return;
     }
@@ -49,13 +61,31 @@ export const TaskProvider = ({ children }) => {
     });
 
     // Subscribe to monthly notes
-    const unsubscribeNotes = subscribeMonthlyNotes(user.uid, (fetchedNotes) => {
+    const unsubscribeMonthly = subscribeMonthlyNotes(user.uid, (fetchedNotes) => {
       setMonthlyNotes(fetchedNotes);
+    });
+
+    // Subscribe to company notes
+    const unsubscribeCompany = subscribeCompanyNotes(user.uid, (fetchedNotes) => {
+      setCompanyNotes(fetchedNotes);
+    });
+
+    // Subscribe to category notes
+    const unsubscribeCategory = subscribeCategoryNotes(user.uid, (fetchedNotes) => {
+      setCategoryNotes(fetchedNotes);
+    });
+
+    // Subscribe to general notes (for flat view)
+    const unsubscribeGeneral = subscribeGeneralNotes(user.uid, (fetchedNotes) => {
+      setGeneralNotes(fetchedNotes);
     });
 
     return () => {
       unsubscribeTasks();
-      unsubscribeNotes();
+      unsubscribeMonthly();
+      unsubscribeCompany();
+      unsubscribeCategory();
+      unsubscribeGeneral();
     };
   }, [user]);
 
@@ -308,6 +338,24 @@ export const TaskProvider = ({ children }) => {
     await saveMonthlyNote(user.uid, monthKey, notes);
   }, [user]);
 
+  // Update company notes
+  const updateCompanyNotes = useCallback(async (companyId, notes) => {
+    if (!user) return;
+    await saveCompanyNote(user.uid, companyId, notes);
+  }, [user]);
+
+  // Update category notes
+  const updateCategoryNotes = useCallback(async (categoryId, notes) => {
+    if (!user) return;
+    await saveCategoryNote(user.uid, categoryId, notes);
+  }, [user]);
+
+  // Update general notes (for flat view)
+  const updateGeneralNotes = useCallback(async (noteKey, notes) => {
+    if (!user) return;
+    await saveGeneralNote(user.uid, noteKey, notes);
+  }, [user]);
+
   // Get active (incomplete) tasks including recurring
   const getActiveTasks = useCallback(() => {
     return tasksWithRecurring.filter((t) => !t.completedAt);
@@ -351,6 +399,9 @@ export const TaskProvider = ({ children }) => {
   const value = {
     tasks: tasksWithRecurring,
     monthlyNotes,
+    companyNotes,
+    categoryNotes,
+    generalNotes,
     loading,
     createTask,
     updateTask,
@@ -360,6 +411,9 @@ export const TaskProvider = ({ children }) => {
     toggleFinalComplete,
     updateSortOrder,
     updateMonthlyNotes,
+    updateCompanyNotes,
+    updateCategoryNotes,
+    updateGeneralNotes,
     getActiveTasks,
     getCompletedTasks,
     getOverdueCount,

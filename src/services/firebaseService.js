@@ -109,6 +109,78 @@ export const subscribeMonthlyNotes = (userId, callback) => {
   );
 };
 
+// Company Notes
+export const subscribeCompanyNotes = (userId, callback) => {
+  const notesCol = getUserCollection(userId, 'companyNotes');
+  return onSnapshot(
+    notesCol,
+    (snapshot) => {
+      const notes = {};
+      snapshot.docs.forEach((doc) => {
+        notes[doc.id] = doc.data().content;
+      });
+      callback(notes);
+    },
+    (error) => {
+      console.error('Error subscribing to company notes:', error);
+      callback({});
+    }
+  );
+};
+
+export const saveCompanyNote = async (userId, companyId, content) => {
+  const noteDoc = getUserDoc(userId, 'companyNotes', companyId);
+  await setDoc(noteDoc, { content });
+};
+
+// Category Notes
+export const subscribeCategoryNotes = (userId, callback) => {
+  const notesCol = getUserCollection(userId, 'categoryNotes');
+  return onSnapshot(
+    notesCol,
+    (snapshot) => {
+      const notes = {};
+      snapshot.docs.forEach((doc) => {
+        notes[doc.id] = doc.data().content;
+      });
+      callback(notes);
+    },
+    (error) => {
+      console.error('Error subscribing to category notes:', error);
+      callback({});
+    }
+  );
+};
+
+export const saveCategoryNote = async (userId, categoryId, content) => {
+  const noteDoc = getUserDoc(userId, 'categoryNotes', categoryId);
+  await setDoc(noteDoc, { content });
+};
+
+// General Notes (for flat view)
+export const subscribeGeneralNotes = (userId, callback) => {
+  const notesCol = getUserCollection(userId, 'generalNotes');
+  return onSnapshot(
+    notesCol,
+    (snapshot) => {
+      const notes = {};
+      snapshot.docs.forEach((doc) => {
+        notes[doc.id] = doc.data().content;
+      });
+      callback(notes);
+    },
+    (error) => {
+      console.error('Error subscribing to general notes:', error);
+      callback({});
+    }
+  );
+};
+
+export const saveGeneralNote = async (userId, noteKey, content) => {
+  const noteDoc = getUserDoc(userId, 'generalNotes', noteKey);
+  await setDoc(noteDoc, { content });
+};
+
 // Settings
 export const fetchSettings = async (userId) => {
   const settingsDoc = getUserDoc(userId, 'settings', 'preferences');
@@ -342,4 +414,31 @@ export const uploadContactAttachment = async (userId, contactId, attachmentData)
     uploadedAt: attachmentData.uploadedAt,
     storageURL: downloadURL,
   };
+};
+
+// Categories
+export const subscribeCategories = (userId, callback) => {
+  const categoriesCol = getUserCollection(userId, 'categories');
+  return onSnapshot(
+    categoriesCol,
+    (snapshot) => {
+      const categories = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      categories.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      callback(categories);
+    },
+    (error) => {
+      console.error('Error subscribing to categories:', error);
+      callback([]);
+    }
+  );
+};
+
+export const saveCategory = async (userId, category) => {
+  const categoryDoc = getUserDoc(userId, 'categories', category.id);
+  await setDoc(categoryDoc, category);
+};
+
+export const deleteCategoryFromDB = async (userId, categoryId) => {
+  const categoryDoc = getUserDoc(userId, 'categories', categoryId);
+  await deleteDoc(categoryDoc);
 };

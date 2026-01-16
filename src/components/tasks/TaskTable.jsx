@@ -91,7 +91,15 @@ const TaskTable = ({ tasks, onEditTask }) => {
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
       >
-        <table className="w-full">
+        <table className="w-full table-fixed">
+          <colgroup>
+            <col style={{ width: '32px' }} />
+            <col style={{ width: '25%' }} />
+            <col style={{ width: '35%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '16%' }} />
+          </colgroup>
           <thead>
             <tr className="border-b border-border">
               <th className="w-8 px-2"></th>

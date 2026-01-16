@@ -327,3 +327,235 @@ export const exportPDFCalendar = (tasks, dateFilter = 'all', filename = 'tasks-c
 
   doc.save(filename);
 };
+
+// Export PDF - By Company View
+export const exportPDFByCompany = (tasks, companies = [], filename = 'tasks-by-company.pdf') => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let yPos = 20;
+
+  // Title
+  doc.setFontSize(18);
+  doc.setTextColor(colors.text);
+  doc.text('Tasks by Company', pageWidth / 2, yPos, { align: 'center' });
+  yPos += 8;
+
+  // Subtitle
+  doc.setFontSize(10);
+  doc.setTextColor(colors.textSecondary);
+  doc.text(`Generated: ${format(new Date(), 'MMMM d, yyyy')}`, pageWidth / 2, yPos, { align: 'center' });
+  yPos += 15;
+
+  // Group tasks by company
+  const grouped = {};
+  tasks.forEach((task) => {
+    const key = task.companyId || 'unassigned';
+    if (!grouped[key]) {
+      grouped[key] = [];
+    }
+    grouped[key].push(task);
+  });
+
+  // Sort company keys alphabetically by company name
+  const companyKeys = Object.keys(grouped).filter(k => k !== 'unassigned');
+  companyKeys.sort((a, b) => {
+    const companyA = companies.find(c => c.id === a);
+    const companyB = companies.find(c => c.id === b);
+    const nameA = companyA?.name || '';
+    const nameB = companyB?.name || '';
+    return nameA.localeCompare(nameB);
+  });
+
+  // Add unassigned at the end if it exists
+  const sortedKeys = [...companyKeys];
+  if (grouped['unassigned']) {
+    sortedKeys.push('unassigned');
+  }
+
+  sortedKeys.forEach((companyId) => {
+    const companyTasks = grouped[companyId];
+    const company = companies.find(c => c.id === companyId);
+    const companyName = companyId === 'unassigned' ? 'Unassigned' : (company?.name || 'Unknown Company');
+
+    // Check if we need a new page
+    if (yPos > 250) {
+      doc.addPage();
+      yPos = 20;
+    }
+
+    // Company header
+    doc.setFillColor(colors.surface);
+    doc.rect(14, yPos - 5, pageWidth - 28, 10, 'F');
+    doc.setFontSize(12);
+    doc.setTextColor(colors.text);
+    doc.setFont(undefined, 'bold');
+    doc.text(companyName, pageWidth / 2, yPos + 2, { align: 'center' });
+    doc.setFont(undefined, 'normal');
+    yPos += 12;
+
+    // Table for this company
+    const tableData = companyTasks.map((task) => [
+      task.taskName || 'Untitled',
+      task.notes || '-',
+      task.draftDue ? formatDate(task.draftDue) : '-',
+      task.finalDue ? formatDate(task.finalDue) : '-',
+    ]);
+
+    doc.autoTable({
+      startY: yPos,
+      head: [['Task Name', 'Notes', 'Draft Due', 'Final Due']],
+      body: tableData,
+      headStyles: {
+        fillColor: colors.primary,
+        textColor: '#FFFFFF',
+        fontSize: 9,
+        fontStyle: 'bold',
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: colors.text,
+      },
+      alternateRowStyles: {
+        fillColor: '#FFFFFF',
+      },
+      columnStyles: {
+        0: { cellWidth: 45 },
+        1: { cellWidth: 65 },
+        2: { cellWidth: 28 },
+        3: { cellWidth: 28 },
+      },
+      margin: { left: 14, right: 14 },
+      didParseCell: function (data) {
+        if (data.section === 'body') {
+          const task = companyTasks[data.row.index];
+          if (data.column.index === 2 && task.draftDue) {
+            data.cell.styles.textColor = getBadgeColor(task.draftDue, task.draftComplete);
+          }
+          if (data.column.index === 3 && task.finalDue) {
+            data.cell.styles.textColor = getBadgeColor(task.finalDue, task.finalComplete);
+          }
+        }
+      },
+    });
+
+    yPos = doc.lastAutoTable.finalY + 15;
+  });
+
+  doc.save(filename);
+};
+
+// Export PDF - By Category View
+export const exportPDFByCategory = (tasks, categories = [], filename = 'tasks-by-category.pdf') => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let yPos = 20;
+
+  // Title
+  doc.setFontSize(18);
+  doc.setTextColor(colors.text);
+  doc.text('Tasks by Category', pageWidth / 2, yPos, { align: 'center' });
+  yPos += 8;
+
+  // Subtitle
+  doc.setFontSize(10);
+  doc.setTextColor(colors.textSecondary);
+  doc.text(`Generated: ${format(new Date(), 'MMMM d, yyyy')}`, pageWidth / 2, yPos, { align: 'center' });
+  yPos += 15;
+
+  // Group tasks by category
+  const grouped = {};
+  tasks.forEach((task) => {
+    const key = task.categoryId || 'unassigned';
+    if (!grouped[key]) {
+      grouped[key] = [];
+    }
+    grouped[key].push(task);
+  });
+
+  // Sort category keys alphabetically by category name
+  const categoryKeys = Object.keys(grouped).filter(k => k !== 'unassigned');
+  categoryKeys.sort((a, b) => {
+    const categoryA = categories.find(c => c.id === a);
+    const categoryB = categories.find(c => c.id === b);
+    const nameA = categoryA?.name || '';
+    const nameB = categoryB?.name || '';
+    return nameA.localeCompare(nameB);
+  });
+
+  // Add unassigned at the end if it exists
+  const sortedKeys = [...categoryKeys];
+  if (grouped['unassigned']) {
+    sortedKeys.push('unassigned');
+  }
+
+  sortedKeys.forEach((categoryId) => {
+    const categoryTasks = grouped[categoryId];
+    const category = categories.find(c => c.id === categoryId);
+    const categoryName = categoryId === 'unassigned' ? 'Unassigned' : (category?.name || 'Unknown Category');
+
+    // Check if we need a new page
+    if (yPos > 250) {
+      doc.addPage();
+      yPos = 20;
+    }
+
+    // Category header
+    doc.setFillColor(colors.surface);
+    doc.rect(14, yPos - 5, pageWidth - 28, 10, 'F');
+    doc.setFontSize(12);
+    doc.setTextColor(colors.text);
+    doc.setFont(undefined, 'bold');
+    doc.text(categoryName, pageWidth / 2, yPos + 2, { align: 'center' });
+    doc.setFont(undefined, 'normal');
+    yPos += 12;
+
+    // Table for this category
+    const tableData = categoryTasks.map((task) => [
+      task.taskName || 'Untitled',
+      task.notes || '-',
+      task.draftDue ? formatDate(task.draftDue) : '-',
+      task.finalDue ? formatDate(task.finalDue) : '-',
+    ]);
+
+    doc.autoTable({
+      startY: yPos,
+      head: [['Task Name', 'Notes', 'Draft Due', 'Final Due']],
+      body: tableData,
+      headStyles: {
+        fillColor: colors.primary,
+        textColor: '#FFFFFF',
+        fontSize: 9,
+        fontStyle: 'bold',
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: colors.text,
+      },
+      alternateRowStyles: {
+        fillColor: '#FFFFFF',
+      },
+      columnStyles: {
+        0: { cellWidth: 45 },
+        1: { cellWidth: 65 },
+        2: { cellWidth: 28 },
+        3: { cellWidth: 28 },
+      },
+      margin: { left: 14, right: 14 },
+      didParseCell: function (data) {
+        if (data.section === 'body') {
+          const task = categoryTasks[data.row.index];
+          if (data.column.index === 2 && task.draftDue) {
+            data.cell.styles.textColor = getBadgeColor(task.draftDue, task.draftComplete);
+          }
+          if (data.column.index === 3 && task.finalDue) {
+            data.cell.styles.textColor = getBadgeColor(task.finalDue, task.finalComplete);
+          }
+        }
+      },
+    });
+
+    yPos = doc.lastAutoTable.finalY + 15;
+  });
+
+  doc.save(filename);
+};

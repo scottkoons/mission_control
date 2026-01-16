@@ -1,17 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
-import { Upload, X, Copy, Download, FileText, Maximize2, Building2, ChevronDown } from 'lucide-react';
+import { Upload, X, Copy, Download, FileText, Maximize2, Building2, ChevronDown, User, Mail, Tag } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import FilePreview from '../files/FilePreview';
 import PdfThumbnail from '../files/PdfThumbnail';
 import { useTasks } from '../../context/TaskContext';
 import { useCompanies } from '../../context/CompanyContext';
+import { useContacts } from '../../context/ContactContext';
+import { useCategories } from '../../context/CategoryContext';
 import { formatDateForInput, getQuickDates } from '../../utils/dateUtils';
 import { format } from 'date-fns';
 
 const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAttachments = false }) => {
   const { createTask, updateTask, duplicateTask } = useTasks();
   const { companies } = useCompanies();
+  const { contacts, getContactsByCompany } = useContacts();
+  const { categories } = useCategories();
   const isEditing = !!task;
 
   const [formData, setFormData] = useState({
@@ -22,17 +26,25 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
     repeat: 'none',
     attachments: [],
     companyId: null,
+    contactId: null,
+    categoryId: null,
   });
   const [isDragging, setIsDragging] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
   const [dateError, setDateError] = useState('');
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  const [showContactDropdown, setShowContactDropdown] = useState(false);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const fileInputRef = useRef(null);
   const companyDropdownRef = useRef(null);
+  const contactDropdownRef = useRef(null);
+  const categoryDropdownRef = useRef(null);
 
   useEffect(() => {
     setDateError(''); // Clear any previous error
     setShowCompanyDropdown(false);
+    setShowContactDropdown(false);
+    setShowCategoryDropdown(false);
     if (task) {
       setFormData({
         taskName: task.taskName || '',
@@ -42,6 +54,8 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
         repeat: task.repeat || 'none',
         attachments: task.attachments || [],
         companyId: task.companyId || null,
+        contactId: task.contactId || null,
+        categoryId: task.categoryId || null,
       });
     } else {
       // Set default dates based on defaultMonth if provided
@@ -60,15 +74,23 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
         repeat: 'none',
         attachments: [],
         companyId: null,
+        contactId: null,
+        categoryId: null,
       });
     }
   }, [task, defaultMonth, isOpen]);
 
-  // Close company dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (companyDropdownRef.current && !companyDropdownRef.current.contains(e.target)) {
         setShowCompanyDropdown(false);
+      }
+      if (contactDropdownRef.current && !contactDropdownRef.current.contains(e.target)) {
+        setShowContactDropdown(false);
+      }
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target)) {
+        setShowCategoryDropdown(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -146,6 +168,25 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
   const getSelectedCompany = () => {
     if (!formData.companyId) return null;
     return companies.find(c => c.id === formData.companyId);
+  };
+
+  const getSelectedContact = () => {
+    if (!formData.contactId) return null;
+    return contacts.find(c => c.id === formData.contactId);
+  };
+
+  // Get available contacts - if a company is selected, show only that company's contacts
+  // Otherwise show all contacts
+  const getAvailableContacts = () => {
+    if (formData.companyId) {
+      return getContactsByCompany(formData.companyId);
+    }
+    return contacts;
+  };
+
+  const getSelectedCategory = () => {
+    if (!formData.categoryId) return null;
+    return categories.find(c => c.id === formData.categoryId);
   };
 
   const handleChange = (e) => {
@@ -279,6 +320,30 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
     setPreviewFile(attachment);
   };
 
+  const handleEmailAttachment = async (attachment) => {
+    const contact = getSelectedContact();
+    if (!contact || !contact.email) {
+      alert('No contact email available');
+      return;
+    }
+
+    // Download the file first so user can attach it
+    await handleDownloadAttachment(attachment);
+
+    // Small delay to ensure download starts before opening email
+    setTimeout(() => {
+      const subject = encodeURIComponent(`Regarding: ${attachment.name}`);
+      const body = encodeURIComponent(
+        `Hi ${contact.name || ''},\n\n` +
+        `Please see the attached file: ${attachment.name}\n\n` +
+        `(The file has been downloaded to your computer - please attach it to this email)\n\n` +
+        `Best regards`
+      );
+
+      window.location.href = `mailto:${contact.email}?subject=${subject}&body=${body}`;
+    }, 500);
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
 
@@ -290,6 +355,8 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
       repeat: formData.repeat,
       attachments: formData.attachments,
       companyId: formData.companyId || null,
+      contactId: formData.contactId || null,
+      categoryId: formData.categoryId || null,
     };
 
     if (isEditing) {
@@ -392,7 +459,7 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
                   <button
                     type="button"
                     onClick={() => {
-                      setFormData(prev => ({ ...prev, companyId: null }));
+                      setFormData(prev => ({ ...prev, companyId: null, contactId: null }));
                       setShowCompanyDropdown(false);
                     }}
                     className={`w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-surface-hover transition-colors ${
@@ -411,7 +478,22 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
                       key={company.id}
                       type="button"
                       onClick={() => {
-                        setFormData(prev => ({ ...prev, companyId: company.id }));
+                        // Auto-assign primary contact if company has one, otherwise clear contact
+                        let newContactId = null;
+                        if (company.primaryContactId) {
+                          // Use the company's primary contact
+                          newContactId = company.primaryContactId;
+                        } else {
+                          // Check if current contact is part of new company
+                          const newCompanyContacts = getContactsByCompany(company.id);
+                          const contactInNewCompany = newCompanyContacts.some(c => c.id === formData.contactId);
+                          newContactId = contactInNewCompany ? formData.contactId : null;
+                        }
+                        setFormData(prev => ({
+                          ...prev,
+                          companyId: company.id,
+                          contactId: newContactId,
+                        }));
                         setShowCompanyDropdown(false);
                       }}
                       className={`w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-surface-hover transition-colors ${
@@ -428,6 +510,160 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
                         <Building2 size={16} className="text-text-muted" />
                       )}
                       <span className="text-sm">{company.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Contact */}
+        {contacts.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-2">
+              Contact (optional)
+            </label>
+            <div className="relative" ref={contactDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowContactDropdown(!showContactDropdown)}
+                className="w-full flex items-center justify-between bg-surface-hover border border-border rounded-lg px-4 py-2.5 text-left focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <div className="flex items-center gap-2">
+                  {getSelectedContact() ? (
+                    <>
+                      <User size={16} className="text-text-muted" />
+                      <span className="text-text-primary">{getSelectedContact().name}</span>
+                      {getSelectedContact().email && (
+                        <span className="text-text-muted text-sm">({getSelectedContact().email})</span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <User size={16} className="text-text-muted" />
+                      <span className="text-text-muted">No contact linked</span>
+                    </>
+                  )}
+                </div>
+                <ChevronDown size={16} className={`text-text-muted transition-transform ${showContactDropdown ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showContactDropdown && (
+                <div className="absolute z-50 w-full mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {/* No contact option */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, contactId: null }));
+                      setShowContactDropdown(false);
+                    }}
+                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-surface-hover transition-colors ${
+                      !formData.contactId ? 'bg-primary/10 text-primary' : 'text-text-secondary'
+                    }`}
+                  >
+                    <span className="text-sm">No contact linked</span>
+                  </button>
+
+                  {/* Divider */}
+                  <div className="border-t border-border" />
+
+                  {/* Contact list */}
+                  {getAvailableContacts().length > 0 ? (
+                    getAvailableContacts().map((contact) => (
+                      <button
+                        key={contact.id}
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, contactId: contact.id }));
+                          setShowContactDropdown(false);
+                        }}
+                        className={`w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-surface-hover transition-colors ${
+                          formData.contactId === contact.id ? 'bg-primary/10 text-primary' : 'text-text-primary'
+                        }`}
+                      >
+                        <User size={16} className="text-text-muted" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm">{contact.name}</span>
+                          {contact.email && (
+                            <span className="text-xs text-text-muted ml-2">({contact.email})</span>
+                          )}
+                        </div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-4 py-2.5 text-sm text-text-muted">
+                      {formData.companyId ? 'No contacts for this company' : 'No contacts available'}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Category */}
+        {categories.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-2">
+              Category (optional)
+            </label>
+            <div className="relative" ref={categoryDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                className="w-full flex items-center justify-between bg-surface-hover border border-border rounded-lg px-4 py-2.5 text-left focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <div className="flex items-center gap-2">
+                  {getSelectedCategory() ? (
+                    <>
+                      <Tag size={16} className="text-primary" />
+                      <span className="text-text-primary">{getSelectedCategory().name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Tag size={16} className="text-text-muted" />
+                      <span className="text-text-muted">No category</span>
+                    </>
+                  )}
+                </div>
+                <ChevronDown size={16} className={`text-text-muted transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showCategoryDropdown && (
+                <div className="absolute z-50 w-full mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {/* No category option */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, categoryId: null }));
+                      setShowCategoryDropdown(false);
+                    }}
+                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-surface-hover transition-colors ${
+                      !formData.categoryId ? 'bg-primary/10 text-primary' : 'text-text-secondary'
+                    }`}
+                  >
+                    <span className="text-sm">No category</span>
+                  </button>
+
+                  {/* Divider */}
+                  <div className="border-t border-border" />
+
+                  {/* Category list */}
+                  {categories.map((category) => (
+                    <button
+                      key={category.id}
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, categoryId: category.id }));
+                        setShowCategoryDropdown(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-surface-hover transition-colors ${
+                        formData.categoryId === category.id ? 'bg-primary/10 text-primary' : 'text-text-primary'
+                      }`}
+                    >
+                      <Tag size={16} className="text-primary" />
+                      <span className="text-sm">{category.name}</span>
                     </button>
                   ))}
                 </div>
@@ -640,6 +876,16 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
                       >
                         <Download size={16} />
                       </button>
+                      {getSelectedContact()?.email && (
+                        <button
+                          type="button"
+                          onClick={() => handleEmailAttachment(attachment)}
+                          className="p-2 rounded-lg bg-white/20 hover:bg-primary/80 text-white transition-colors"
+                          title={`Email to ${getSelectedContact().name}`}
+                        >
+                          <Mail size={16} />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => handleRemoveAttachment(attachment.id)}

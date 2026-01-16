@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import Header from '../components/layout/Header';
 import MonthSection from '../components/tasks/MonthSection';
 import FlatView from '../components/tasks/FlatView';
+import CompanyView from '../components/tasks/CompanyView';
+import CategoryView from '../components/tasks/CategoryView';
 import CalendarView from '../components/calendar/CalendarView';
 import TaskModal from '../components/tasks/TaskModal';
 import { useTasks } from '../context/TaskContext';
@@ -47,6 +49,10 @@ const Dashboard = ({ currentView, onViewChange }) => {
         return 'Marketing Task List';
       case 'flat':
         return 'Marketing Task List (Flat)';
+      case 'company':
+        return 'Tasks by Company';
+      case 'category':
+        return 'Tasks by Category';
       case 'calendar':
         return 'Calendar View';
       default:
@@ -150,6 +156,23 @@ const Dashboard = ({ currentView, onViewChange }) => {
           <FlatView
             tasks={filteredTasks}
             onEditTask={handleEditTask}
+            onAddTask={handleAddTask}
+          />
+        )}
+
+        {currentView === 'company' && (
+          <CompanyView
+            tasks={filteredTasks}
+            onEditTask={handleEditTask}
+            onAddTask={handleAddTask}
+          />
+        )}
+
+        {currentView === 'category' && (
+          <CategoryView
+            tasks={filteredTasks}
+            onEditTask={handleEditTask}
+            onAddTask={handleAddTask}
           />
         )}
 

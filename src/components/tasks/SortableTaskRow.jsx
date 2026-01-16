@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useState } from 'react';
-import { GripVertical, Trash2, Paperclip } from 'lucide-react';
+import { GripVertical, Trash2, Paperclip, User } from 'lucide-react';
 import DateBadge from './DateBadge';
 import ConfirmModal from '../common/ConfirmModal';
 import { useTasks } from '../../context/TaskContext';
@@ -27,6 +27,7 @@ const SortableTaskRow = ({ task, onEdit }) => {
   };
 
   const hasAttachments = task.attachments && task.attachments.length > 0;
+  const hasContact = !!task.contactId;
 
   const handleRowClick = () => {
     onEdit(task);
@@ -104,6 +105,18 @@ const SortableTaskRow = ({ task, onEdit }) => {
       {/* Info/Actions */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
+          {/* Contact indicator */}
+          <div
+            className={`p-1 ${
+              hasContact
+                ? 'text-success'
+                : 'text-text-muted'
+            }`}
+            title={hasContact ? 'Contact assigned' : 'No contact assigned'}
+          >
+            <User size={16} />
+          </div>
+
           {/* Attachment indicator */}
           <button
             onClick={handleAttachmentClick}

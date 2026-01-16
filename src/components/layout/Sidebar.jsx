@@ -5,9 +5,11 @@ import {
   CheckCircle2,
   FolderOpen,
   Users,
+  Tag,
   List,
   ListOrdered,
   Calendar,
+  Building2,
   FileText,
   Upload,
   Download,
@@ -138,6 +140,7 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
   const isOnCompleted = location.pathname === '/completed';
   const isOnFileCabinet = location.pathname === '/files';
   const isOnContacts = location.pathname === '/contacts';
+  const isOnCategories = location.pathname === '/categories';
 
   return (
     <aside
@@ -207,6 +210,12 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
           onClick={() => handleNavigate('/contacts')}
           isActive={isOnContacts}
         />
+        <NavItem
+          icon={Tag}
+          label="Categories"
+          onClick={() => handleNavigate('/categories')}
+          isActive={isOnCategories}
+        />
 
         {/* Divider */}
         <div className="border-t border-border my-3" />
@@ -232,6 +241,24 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
           isActive={isOnDashboard && currentView === 'flat'}
         />
         <NavItem
+          icon={Building2}
+          label="By Company"
+          onClick={() => {
+            handleNavigate('/');
+            onViewChange('company');
+          }}
+          isActive={isOnDashboard && currentView === 'company'}
+        />
+        <NavItem
+          icon={Tag}
+          label="By Category"
+          onClick={() => {
+            handleNavigate('/');
+            onViewChange('category');
+          }}
+          isActive={isOnDashboard && currentView === 'category'}
+        />
+        <NavItem
           icon={Calendar}
           label="Calendar"
           onClick={() => {
@@ -255,6 +282,16 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
           icon={FileText}
           label="PDF - Grouped"
           onClick={() => onExportPDF('grouped')}
+        />
+        <NavItem
+          icon={FileText}
+          label="PDF - Company"
+          onClick={() => onExportPDF('company')}
+        />
+        <NavItem
+          icon={FileText}
+          label="PDF - Category"
+          onClick={() => onExportPDF('category')}
         />
         <NavItem
           icon={Download}

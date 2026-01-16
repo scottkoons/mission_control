@@ -1,8 +1,12 @@
 import { useMemo } from 'react';
+import { Plus } from 'lucide-react';
 import TaskTable from './TaskTable';
+import SectionNotes from './SectionNotes';
+import { useTasks } from '../../context/TaskContext';
 import { sortByDraftDue } from '../../utils/sortUtils';
 
-const FlatView = ({ tasks, onEditTask }) => {
+const FlatView = ({ tasks, onEditTask, onAddTask }) => {
+  const { generalNotes, updateGeneralNotes } = useTasks();
   // Sort tasks: dated tasks by draft due, then unscheduled at bottom
   const sortedTasks = useMemo(() => {
     const dated = tasks.filter((t) => t.draftDue || t.finalDue);
@@ -35,10 +39,30 @@ const FlatView = ({ tasks, onEditTask }) => {
       </div>
 
       {/* Task Table */}
-      <div className="px-2 pb-4">
+      <div className="px-2">
         <TaskTable
           tasks={sortedTasks}
           onEditTask={onEditTask}
+        />
+      </div>
+
+      {/* Footer: Notes with Add Button */}
+      <div className="px-6 pb-6 pt-4 flex flex-col flex-1">
+        <SectionNotes
+          noteKey="flat-view"
+          label="General Notes"
+          notes={generalNotes['flat-view'] || ''}
+          onUpdate={updateGeneralNotes}
+          placeholder="Type general notes here..."
+          rightAction={
+            <button
+              onClick={() => onAddTask()}
+              className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
+            >
+              <Plus size={16} />
+              <span>Add New Task</span>
+            </button>
+          }
         />
       </div>
     </div>
