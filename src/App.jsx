@@ -4,11 +4,12 @@ import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Completed from './pages/Completed';
 import FileCabinet from './pages/FileCabinet';
+import Login from './pages/Login';
 import ToastContainer from './components/common/Toast';
 import CSVImport from './components/export/CSVImport';
-import { storageService } from './services/storageService';
 import { useTasks } from './context/TaskContext';
 import { useToast } from './context/ToastContext';
+import { useAuth } from './context/AuthContext';
 import { exportTasksToCSV, downloadCSV } from './utils/csvUtils';
 import { exportPDFFlat, exportPDFGrouped } from './utils/pdfUtils';
 
@@ -17,20 +18,28 @@ function App() {
   const [showImportModal, setShowImportModal] = useState(false);
   const { tasks, monthlyNotes } = useTasks();
   const { addToast } = useToast();
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
-    const settings = storageService.getSettings();
-    setCurrentView(settings.defaultView || 'grouped');
+    // Load settings from localStorage (still used for UI preferences)
+    const savedSettings = localStorage.getItem('mission-control-settings');
+    if (savedSettings) {
+      const settings = JSON.parse(savedSettings);
+      setCurrentView(settings.defaultView || 'grouped');
+    }
   }, []);
 
   const handleViewChange = (view) => {
     setCurrentView(view);
-    storageService.saveSettings({ defaultView: view });
+    const savedSettings = localStorage.getItem('mission-control-settings');
+    const settings = savedSettings ? JSON.parse(savedSettings) : {};
+    localStorage.setItem('mission-control-settings', JSON.stringify({ ...settings, defaultView: view }));
   };
 
   const handleExportPDF = (type) => {
     try {
-      const settings = storageService.getSettings();
+      const savedSettings = localStorage.getItem('mission-control-settings');
+      const settings = savedSettings ? JSON.parse(savedSettings) : {};
       const dateMode = settings.groupedDateMode || 'draft';
 
       if (type === 'flat') {
@@ -61,6 +70,25 @@ function App() {
   const handleImportCSV = () => {
     setShowImportModal(true);
   };
+
+  // Show loading spinner while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-text-secondary">Loading...</div>
+      </div>
+    );
+  }
+
+  // Show login page if not authenticated
+  if (!user) {
+    return (
+      <>
+        <Login />
+        <ToastContainer />
+      </>
+    );
+  }
 
   return (
     <>

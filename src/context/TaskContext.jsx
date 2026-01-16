@@ -1,9 +1,17 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { storageService } from '../services/storageService';
 import { useToast } from './ToastContext';
+import { useAuth } from './AuthContext';
 import { generateRecurringInstances } from '../services/recurringService';
 import { getDateStatus } from '../utils/dateUtils';
+import {
+  subscribeTasks,
+  subscribeMonthlyNotes,
+  saveTask,
+  saveTasks,
+  deleteTaskFromDB,
+  saveMonthlyNote,
+} from '../services/firebaseService';
 
 const TaskContext = createContext();
 
@@ -20,31 +28,48 @@ export const TaskProvider = ({ children }) => {
   const [monthlyNotes, setMonthlyNotes] = useState({});
   const [loading, setLoading] = useState(true);
   const { showDeleteToast } = useToast();
+  const { user } = useAuth();
 
-  // Load initial data
+  // Subscribe to real-time data when user is authenticated
   useEffect(() => {
-    const loadedTasks = storageService.getTasks();
-    const loadedNotes = storageService.getMonthlyNotes();
-    setTasks(loadedTasks);
-    setMonthlyNotes(loadedNotes);
-    setLoading(false);
-  }, []);
+    if (!user) {
+      setTasks([]);
+      setMonthlyNotes({});
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    // Subscribe to tasks
+    const unsubscribeTasks = subscribeTasks(user.uid, (fetchedTasks) => {
+      setTasks(fetchedTasks);
+      setLoading(false);
+    });
+
+    // Subscribe to monthly notes
+    const unsubscribeNotes = subscribeMonthlyNotes(user.uid, (fetchedNotes) => {
+      setMonthlyNotes(fetchedNotes);
+    });
+
+    return () => {
+      unsubscribeTasks();
+      unsubscribeNotes();
+    };
+  }, [user]);
 
   // Generate recurring instances based on current tasks
   const tasksWithRecurring = useMemo(() => {
-    // Get non-recurring tasks for reference
     const regularTasks = tasks.filter((t) => !t.isRecurring);
     const existingInstances = tasks.filter((t) => t.isRecurring);
-
-    // Generate new recurring instances
     const newInstances = generateRecurringInstances(regularTasks, existingInstances);
-
-    // Combine regular tasks with existing and new instances
     return [...tasks, ...newInstances];
   }, [tasks]);
 
   // Create a new task
-  const createTask = useCallback((taskData) => {
+  const createTask = useCallback(async (taskData) => {
+    if (!user) return null;
+
     const newTask = {
       id: taskData.id || uuidv4(),
       taskName: taskData.taskName || '',
@@ -63,18 +88,16 @@ export const TaskProvider = ({ children }) => {
       updatedAt: new Date().toISOString(),
     };
 
-    const updatedTasks = [...tasks, newTask];
-    setTasks(updatedTasks);
-    storageService.saveTasks(updatedTasks);
+    await saveTask(user.uid, newTask);
     return newTask;
-  }, [tasks]);
+  }, [user, tasks]);
 
   // Update an existing task
-  const updateTask = useCallback((taskId, updates) => {
-    // Check if task exists in stored tasks
+  const updateTask = useCallback(async (taskId, updates) => {
+    if (!user) return;
+
     const existsInStorage = tasks.find((t) => t.id === taskId);
 
-    // If it's a generated recurring instance, materialize it first
     if (!existsInStorage) {
       const generatedTask = tasksWithRecurring.find((t) => t.id === taskId);
       if (generatedTask) {
@@ -84,7 +107,6 @@ export const TaskProvider = ({ children }) => {
           updatedAt: new Date().toISOString(),
         };
 
-        // Check completion status
         if (materializedTask.draftComplete && materializedTask.finalComplete && !generatedTask.completedAt) {
           materializedTask.completedAt = new Date().toISOString();
         }
@@ -92,96 +114,76 @@ export const TaskProvider = ({ children }) => {
           materializedTask.completedAt = null;
         }
 
-        const updatedTasks = [...tasks, materializedTask];
-        setTasks(updatedTasks);
-        storageService.saveTasks(updatedTasks);
+        await saveTask(user.uid, materializedTask);
         return;
       }
-      return; // Task not found
+      return;
     }
 
-    const updatedTasks = tasks.map((task) => {
-      if (task.id === taskId) {
-        const updatedTask = {
-          ...task,
-          ...updates,
-          updatedAt: new Date().toISOString(),
-        };
+    const task = tasks.find((t) => t.id === taskId);
+    const updatedTask = {
+      ...task,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
 
-        // Check if task is now fully complete
-        if (updatedTask.draftComplete && updatedTask.finalComplete && !task.completedAt) {
-          updatedTask.completedAt = new Date().toISOString();
-        }
+    if (updatedTask.draftComplete && updatedTask.finalComplete && !task.completedAt) {
+      updatedTask.completedAt = new Date().toISOString();
+    }
+    if ((!updatedTask.draftComplete || !updatedTask.finalComplete) && task.completedAt) {
+      updatedTask.completedAt = null;
+    }
 
-        // Check if task was un-completed
-        if ((!updatedTask.draftComplete || !updatedTask.finalComplete) && task.completedAt) {
-          updatedTask.completedAt = null;
-        }
-
-        return updatedTask;
-      }
-      return task;
-    });
-
-    setTasks(updatedTasks);
-    storageService.saveTasks(updatedTasks);
-  }, [tasks, tasksWithRecurring]);
+    await saveTask(user.uid, updatedTask);
+  }, [user, tasks, tasksWithRecurring]);
 
   // Delete a task with undo capability
-  const deleteTask = useCallback((taskId) => {
+  const deleteTask = useCallback(async (taskId) => {
+    if (!user) return;
+
     let taskToDelete = tasks.find((t) => t.id === taskId);
 
-    // If it's a generated recurring instance, materialize it first so we can delete it
     if (!taskToDelete) {
       const generatedTask = tasksWithRecurring.find((t) => t.id === taskId);
       if (generatedTask) {
-        // Add to storage as completed (this prevents regeneration)
         const materializedTask = {
           ...generatedTask,
-          completedAt: new Date().toISOString(), // Mark as completed so it won't regenerate
+          completedAt: new Date().toISOString(),
         };
 
-        // Save the materialized task as "deleted" (completed)
-        const updatedTasks = [...tasks, materializedTask];
-        setTasks(updatedTasks);
-        storageService.saveTasks(updatedTasks);
+        await saveTask(user.uid, materializedTask);
 
-        // Show undo toast for generated instance
-        showDeleteToast('Task deleted', () => {
-          // Undo: remove the materialized task so it can regenerate
-          const restoredTasks = tasks.filter((t) => t.id !== taskId);
-          setTasks(restoredTasks);
-          storageService.saveTasks(restoredTasks);
+        showDeleteToast('Task deleted', async () => {
+          await deleteTaskFromDB(user.uid, taskId);
         });
         return;
       }
-      return; // Task not found
+      return;
     }
 
-    // If deleting a recurring template, also delete all its instances
     let tasksToRemove = [taskId];
     if (taskToDelete.repeat && taskToDelete.repeat !== 'none') {
       const instances = tasks.filter((t) => t.recurringParentId === taskId);
       tasksToRemove = [...tasksToRemove, ...instances.map((t) => t.id)];
     }
 
-    const updatedTasks = tasks.filter((t) => !tasksToRemove.includes(t.id));
-    setTasks(updatedTasks);
-    storageService.saveTasks(updatedTasks);
-
-    // Show undo toast
     const deletedTasks = tasks.filter((t) => tasksToRemove.includes(t.id));
-    showDeleteToast('Task deleted', () => {
-      // Undo function - restore the tasks
-      const restoredTasks = [...updatedTasks, ...deletedTasks];
-      setTasks(restoredTasks);
-      storageService.saveTasks(restoredTasks);
+
+    for (const id of tasksToRemove) {
+      await deleteTaskFromDB(user.uid, id);
+    }
+
+    showDeleteToast('Task deleted', async () => {
+      for (const task of deletedTasks) {
+        await saveTask(user.uid, task);
+      }
     });
-  }, [tasks, tasksWithRecurring, showDeleteToast]);
+  }, [user, tasks, tasksWithRecurring, showDeleteToast]);
 
   // Duplicate a task
-  const duplicateTask = useCallback((taskId) => {
-    // Check both stored and generated tasks
+  const duplicateTask = useCallback(async (taskId) => {
+    if (!user) return null;
+
     let taskToDuplicate = tasks.find((t) => t.id === taskId);
     if (!taskToDuplicate) {
       taskToDuplicate = tasksWithRecurring.find((t) => t.id === taskId);
@@ -197,75 +199,63 @@ export const TaskProvider = ({ children }) => {
       completedAt: null,
       isRecurring: false,
       recurringParentId: null,
-      repeat: 'none', // Duplicated task doesn't inherit repeat
+      repeat: 'none',
       sortOrder: tasks.length + 1,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    const updatedTasks = [...tasks, newTask];
-    setTasks(updatedTasks);
-    storageService.saveTasks(updatedTasks);
+    await saveTask(user.uid, newTask);
     return newTask;
-  }, [tasks, tasksWithRecurring]);
+  }, [user, tasks, tasksWithRecurring]);
 
   // Toggle draft completion
-  const toggleDraftComplete = useCallback((taskId) => {
-    // Find in regular tasks or generated recurring instances
+  const toggleDraftComplete = useCallback(async (taskId) => {
     const task = tasksWithRecurring.find((t) => t.id === taskId);
     if (task) {
-      // If it's a generated recurring instance, save it first
       if (task.isRecurring && !tasks.find((t) => t.id === taskId)) {
-        const updatedTasks = [...tasks, { ...task, draftComplete: !task.draftComplete }];
-        setTasks(updatedTasks);
-        storageService.saveTasks(updatedTasks);
+        await saveTask(user.uid, { ...task, draftComplete: !task.draftComplete });
       } else {
-        updateTask(taskId, { draftComplete: !task.draftComplete });
+        await updateTask(taskId, { draftComplete: !task.draftComplete });
       }
     }
-  }, [tasks, tasksWithRecurring, updateTask]);
+  }, [user, tasks, tasksWithRecurring, updateTask]);
 
   // Toggle final completion
-  // When marking final as complete, also mark draft as complete
-  const toggleFinalComplete = useCallback((taskId) => {
+  const toggleFinalComplete = useCallback(async (taskId) => {
     const task = tasksWithRecurring.find((t) => t.id === taskId);
     if (task) {
       const newFinalComplete = !task.finalComplete;
-      // If marking final complete, also mark draft complete
       const updates = newFinalComplete
         ? { finalComplete: true, draftComplete: true }
         : { finalComplete: false };
 
       if (task.isRecurring && !tasks.find((t) => t.id === taskId)) {
-        const updatedTasks = [...tasks, { ...task, ...updates }];
-        setTasks(updatedTasks);
-        storageService.saveTasks(updatedTasks);
+        await saveTask(user.uid, { ...task, ...updates });
       } else {
-        updateTask(taskId, updates);
+        await updateTask(taskId, updates);
       }
     }
-  }, [tasks, tasksWithRecurring, updateTask]);
+  }, [user, tasks, tasksWithRecurring, updateTask]);
 
   // Update sort order
-  const updateSortOrder = useCallback((taskIds) => {
-    const updatedTasks = tasks.map((task) => {
+  const updateSortOrder = useCallback(async (taskIds) => {
+    if (!user) return;
+
+    const tasksToUpdate = tasks.filter((task) => taskIds.includes(task.id));
+    const updatedTasks = tasksToUpdate.map((task) => {
       const newIndex = taskIds.indexOf(task.id);
-      if (newIndex >= 0) {
-        return { ...task, sortOrder: newIndex + 1 };
-      }
-      return task;
+      return { ...task, sortOrder: newIndex + 1 };
     });
 
-    setTasks(updatedTasks);
-    storageService.saveTasks(updatedTasks);
-  }, [tasks]);
+    await saveTasks(user.uid, updatedTasks);
+  }, [user, tasks]);
 
   // Update monthly notes
-  const updateMonthlyNotes = useCallback((monthKey, notes) => {
-    const updatedNotes = { ...monthlyNotes, [monthKey]: notes };
-    setMonthlyNotes(updatedNotes);
-    storageService.saveMonthlyNotes(monthKey, notes);
-  }, [monthlyNotes]);
+  const updateMonthlyNotes = useCallback(async (monthKey, notes) => {
+    if (!user) return;
+    await saveMonthlyNote(user.uid, monthKey, notes);
+  }, [user]);
 
   // Get active (incomplete) tasks including recurring
   const getActiveTasks = useCallback(() => {
@@ -277,41 +267,33 @@ export const TaskProvider = ({ children }) => {
     return tasks.filter((t) => t.completedAt);
   }, [tasks]);
 
-  // Get overdue dates count - uses same logic as DateBadge display
+  // Get overdue dates count
   const getOverdueCount = useCallback(() => {
     let count = 0;
     tasksWithRecurring.forEach((task) => {
       if (task.completedAt) return;
-
-      // Check draft date status
       if (task.draftDue && getDateStatus(task.draftDue, task.draftComplete) === 'overdue') {
         count++;
       }
-      // Check final date status
       if (task.finalDue && getDateStatus(task.finalDue, task.finalComplete) === 'overdue') {
         count++;
       }
     });
-
     return count;
   }, [tasksWithRecurring]);
 
-  // Get due soon dates count - uses same logic as DateBadge display
+  // Get due soon dates count
   const getDueSoonCount = useCallback(() => {
     let count = 0;
     tasksWithRecurring.forEach((task) => {
       if (task.completedAt) return;
-
-      // Check draft date status
       if (task.draftDue && getDateStatus(task.draftDue, task.draftComplete) === 'soon') {
         count++;
       }
-      // Check final date status
       if (task.finalDue && getDateStatus(task.finalDue, task.finalComplete) === 'soon') {
         count++;
       }
     });
-
     return count;
   }, [tasksWithRecurring]);
 

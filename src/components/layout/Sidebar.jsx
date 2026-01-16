@@ -15,10 +15,11 @@ import {
   Moon,
   Sun,
   Monitor,
+  LogOut,
 } from 'lucide-react';
 import { useTasks } from '../../context/TaskContext';
 import { useTheme } from '../../context/ThemeContext';
-import { storageService } from '../../services/storageService';
+import { useAuth } from '../../context/AuthContext';
 
 const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImportCSV, onNavClick }) => {
   const [collapsed, setCollapsed] = useState(false);
@@ -26,19 +27,33 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
   const location = useLocation();
   const { getOverdueCount, getDueSoonCount } = useTasks();
   const { currentTheme, cycleTheme, themes } = useTheme();
+  const { user, logout } = useAuth();
 
   const overdueCount = getOverdueCount();
   const dueSoonCount = getDueSoonCount();
 
   useEffect(() => {
-    const settings = storageService.getSettings();
-    setCollapsed(settings.sidebarCollapsed || false);
+    const savedSettings = localStorage.getItem('mission-control-settings');
+    if (savedSettings) {
+      const settings = JSON.parse(savedSettings);
+      setCollapsed(settings.sidebarCollapsed || false);
+    }
   }, []);
 
   const toggleCollapse = () => {
     const newCollapsed = !collapsed;
     setCollapsed(newCollapsed);
-    storageService.saveSettings({ sidebarCollapsed: newCollapsed });
+    const savedSettings = localStorage.getItem('mission-control-settings');
+    const settings = savedSettings ? JSON.parse(savedSettings) : {};
+    localStorage.setItem('mission-control-settings', JSON.stringify({ ...settings, sidebarCollapsed: newCollapsed }));
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   const handleNavigate = (path) => {
@@ -245,8 +260,8 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
         />
       </nav>
 
-      {/* Footer - Theme Toggle */}
-      <div className="p-2 border-t border-border">
+      {/* Footer - Theme Toggle & User */}
+      <div className="p-2 border-t border-border space-y-1">
         <button
           onClick={cycleTheme}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors"
@@ -257,6 +272,29 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
             {themes[currentTheme]?.label || 'Space Program'}
           </span>
         </button>
+
+        {/* User Info & Logout */}
+        {user && (
+          <div className={`flex items-center gap-2 px-3 py-2 ${collapsed ? 'md:justify-center' : ''}`}>
+            {user.photoURL && (
+              <img
+                src={user.photoURL}
+                alt={user.displayName || 'User'}
+                className="w-6 h-6 rounded-full flex-shrink-0"
+              />
+            )}
+            <span className={`text-xs text-text-muted truncate flex-1 ${collapsed ? 'md:hidden' : ''}`}>
+              {user.displayName || user.email}
+            </span>
+            <button
+              onClick={handleLogout}
+              className="p-1 rounded text-text-muted hover:text-danger hover:bg-surface-hover transition-colors flex-shrink-0"
+              title="Sign out"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );
