@@ -252,6 +252,56 @@ export const subscribeFiles = (userId, callback) => {
   );
 };
 
+// Update file metadata (for description, folderId, lastViewedAt)
+export const updateFileMetadata = async (userId, fileId, updates) => {
+  const fileDoc = getUserDoc(userId, 'files', fileId);
+  await setDoc(fileDoc, updates, { merge: true });
+};
+
+// Bulk update files (for moving multiple files)
+export const updateFilesMetadata = async (userId, fileIds, updates) => {
+  const batch = writeBatch(db);
+  fileIds.forEach((fileId) => {
+    const fileDoc = getUserDoc(userId, 'files', fileId);
+    batch.update(fileDoc, updates);
+  });
+  await batch.commit();
+};
+
+// Bulk delete files
+export const deleteFilesFromDB = async (userId, fileIds) => {
+  for (const fileId of fileIds) {
+    await deleteFileFromDB(userId, fileId);
+  }
+};
+
+// Folders (File Cabinet)
+export const subscribeFolders = (userId, callback) => {
+  const foldersCol = getUserCollection(userId, 'folders');
+  return onSnapshot(
+    foldersCol,
+    (snapshot) => {
+      const folders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      folders.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      callback(folders);
+    },
+    (error) => {
+      console.error('Error subscribing to folders:', error);
+      callback([]);
+    }
+  );
+};
+
+export const saveFolder = async (userId, folder) => {
+  const folderDoc = getUserDoc(userId, 'folders', folder.id);
+  await setDoc(folderDoc, folder);
+};
+
+export const deleteFolderFromDB = async (userId, folderId) => {
+  const folderDoc = getUserDoc(userId, 'folders', folderId);
+  await deleteDoc(folderDoc);
+};
+
 // Task Attachments (stored in Firebase Storage)
 export const uploadAttachment = async (userId, taskId, attachmentData) => {
   const storageRef = ref(

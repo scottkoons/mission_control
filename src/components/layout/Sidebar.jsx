@@ -10,7 +10,6 @@ import {
   ListOrdered,
   Calendar,
   Building2,
-  FileText,
   Upload,
   Download,
   ChevronLeft,
@@ -188,7 +187,10 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
               count: dueSoonCount,
               tooltip: `${dueSoonCount} date${dueSoonCount === 1 ? '' : 's'} due soon`
             }}
-            onClick={() => handleNavigate('/')}
+            onClick={() => {
+              handleNavigate('/');
+              onViewChange('grouped');
+            }}
             isActive={isOnDashboard}
           />
         </div>
@@ -274,22 +276,22 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
         {/* Export Section */}
         <SectionHeader>Export</SectionHeader>
         <NavItem
-          icon={FileText}
-          label="PDF - Flat"
-          onClick={() => onExportPDF('flat')}
-        />
-        <NavItem
-          icon={FileText}
+          icon={ListOrdered}
           label="PDF - Grouped"
           onClick={() => onExportPDF('grouped')}
         />
         <NavItem
-          icon={FileText}
+          icon={List}
+          label="PDF - Flat"
+          onClick={() => onExportPDF('flat')}
+        />
+        <NavItem
+          icon={Building2}
           label="PDF - Company"
           onClick={() => onExportPDF('company')}
         />
         <NavItem
-          icon={FileText}
+          icon={Tag}
           label="PDF - Category"
           onClick={() => onExportPDF('category')}
         />

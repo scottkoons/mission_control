@@ -5,7 +5,7 @@ import { formatDate, getMonthDisplayName, groupTasksByMonth, getMonthKey } from 
 
 // Colors for PDF - matching dashboard theme
 const colors = {
-  header: '#334155',      // Slate for headers
+  header: '#64748b',      // Lighter slate for headers
   secondary: '#38BDF8',   // Blue for future dates
   success: '#10B981',     // Green for complete
   warning: '#FBBF24',     // Yellow for due soon
@@ -16,6 +16,20 @@ const colors = {
   border: '#e2e8f0',      // Light border
   surface: '#f8fafc',     // Light surface
   rowBorder: '#e2e8f0',   // Row borders
+};
+
+// Add page numbers to all pages
+const addPageNumbers = (doc) => {
+  const totalPages = doc.internal.getNumberOfPages();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(hexToRgb(colors.textSecondary).r, hexToRgb(colors.textSecondary).g, hexToRgb(colors.textSecondary).b);
+    doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+  }
 };
 
 // Helper to convert hex to RGB
@@ -77,11 +91,12 @@ const getBadgeColor = (date, isComplete) => {
 };
 
 // Export PDF - Flat View
-export const exportPDFFlat = (tasks, filename = 'tasks-flat.pdf') => {
+export const exportPDFFlat = (tasks, notes = '', filename = 'tasks-flat.pdf') => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 14;
   const contentWidth = pageWidth - (margin * 2);
+  const tableWidth = contentWidth - 2; // Account for inner margins
 
   // Title
   doc.setFontSize(18);
@@ -104,21 +119,11 @@ export const exportPDFFlat = (tasks, filename = 'tasks-flat.pdf') => {
   // Draw section box with rounded corners
   let yPos = 35;
   const headerHeight = 12;
-  const rowHeight = 10;
-  const estimatedHeight = headerHeight + (sortedTasks.length * rowHeight) + 10;
-
-  // Section container with rounded corners and border
-  const borderRgb = hexToRgb(colors.border);
-  doc.setDrawColor(borderRgb.r, borderRgb.g, borderRgb.b);
-  doc.setLineWidth(0.5);
-  doc.roundedRect(margin, yPos, contentWidth, Math.min(estimatedHeight, 240), 3, 3, 'S');
 
   // Section header with rounded top corners
   const headerRgb = hexToRgb(colors.header);
   doc.setFillColor(headerRgb.r, headerRgb.g, headerRgb.b);
-  // Draw header background (clip to rounded corners at top)
   doc.roundedRect(margin, yPos, contentWidth, headerHeight, 3, 3, 'F');
-  // Cover bottom rounded corners with rectangle
   doc.rect(margin, yPos + 6, contentWidth, headerHeight - 6, 'F');
 
   // Header text
@@ -129,6 +134,11 @@ export const exportPDFFlat = (tasks, filename = 'tasks-flat.pdf') => {
   doc.setFont(undefined, 'normal');
 
   yPos += headerHeight + 2;
+
+  // Calculate column widths to fill table width
+  const dateColWidth = 32;
+  const notesColWidth = tableWidth * 0.35;
+  const taskNameColWidth = tableWidth - notesColWidth - (dateColWidth * 2);
 
   // Table with custom styling
   doc.autoTable({
@@ -141,31 +151,31 @@ export const exportPDFFlat = (tasks, filename = 'tasks-flat.pdf') => {
       task.finalDue ? formatDate(task.finalDue) : '-',
     ]),
     headStyles: {
-      fillColor: [248, 250, 252], // surface color
-      textColor: [100, 116, 139], // textSecondary
+      fillColor: [248, 250, 252],
+      textColor: [100, 116, 139],
       fontSize: 8,
       fontStyle: 'bold',
       lineWidth: 0,
     },
     bodyStyles: {
       fontSize: 8,
-      textColor: [30, 41, 59], // text color
+      textColor: [30, 41, 59],
       lineWidth: 0.1,
-      lineColor: [226, 232, 240], // border color
+      lineColor: [226, 232, 240],
     },
     alternateRowStyles: {
       fillColor: [255, 255, 255],
     },
     columnStyles: {
-      0: { cellWidth: 50 },
-      1: { cellWidth: 70 },
-      2: { cellWidth: 30, halign: 'center' },
-      3: { cellWidth: 30, halign: 'center' },
+      0: { cellWidth: taskNameColWidth },
+      1: { cellWidth: notesColWidth },
+      2: { cellWidth: dateColWidth, halign: 'center' },
+      3: { cellWidth: dateColWidth, halign: 'center' },
     },
     margin: { left: margin + 1, right: margin + 1 },
+    tableWidth: tableWidth,
     tableLineWidth: 0,
     didDrawCell: function (data) {
-      // Draw colored pill for date cells
       if (data.section === 'body') {
         const task = sortedTasks[data.row.index];
         if (data.column.index === 2 && task.draftDue) {
@@ -174,8 +184,6 @@ export const exportPDFFlat = (tasks, filename = 'tasks-flat.pdf') => {
           const textWidth = doc.getTextWidth(dateText);
           const pillX = data.cell.x + (data.cell.width - textWidth - 6) / 2;
           const pillY = data.cell.y + data.cell.height / 2 + 1;
-
-          // Clear the cell text and draw pill
           doc.setFillColor(255, 255, 255);
           doc.rect(data.cell.x + 1, data.cell.y + 1, data.cell.width - 2, data.cell.height - 2, 'F');
           doc.setFontSize(7);
@@ -187,8 +195,6 @@ export const exportPDFFlat = (tasks, filename = 'tasks-flat.pdf') => {
           const textWidth = doc.getTextWidth(dateText);
           const pillX = data.cell.x + (data.cell.width - textWidth - 6) / 2;
           const pillY = data.cell.y + data.cell.height / 2 + 1;
-
-          // Clear the cell text and draw pill
           doc.setFillColor(255, 255, 255);
           doc.rect(data.cell.x + 1, data.cell.y + 1, data.cell.width - 2, data.cell.height - 2, 'F');
           doc.setFontSize(7);
@@ -197,6 +203,45 @@ export const exportPDFFlat = (tasks, filename = 'tasks-flat.pdf') => {
       }
     },
   });
+
+  const tableEndY = doc.lastAutoTable.finalY;
+
+  // Notes section inside the box
+  const notesStartY = tableEndY + 6;
+  const notesText = notes || '';
+  const splitNotes = notesText ? doc.splitTextToSize(notesText, contentWidth - 8) : [];
+  const notesTextHeight = splitNotes.length * 4;
+  const minNotesHeight = 20; // Minimum height for notes section
+  const notesHeight = Math.max(minNotesHeight, notesTextHeight + 10);
+
+  // Draw notes background
+  const notesBgRgb = hexToRgb(colors.surface);
+  doc.setFillColor(notesBgRgb.r, notesBgRgb.g, notesBgRgb.b);
+  doc.rect(margin + 1, notesStartY, contentWidth - 2, notesHeight, 'F');
+
+  // Notes label
+  doc.setFontSize(8);
+  doc.setFont(undefined, 'bold');
+  doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
+  doc.text('Notes:', margin + 4, notesStartY + 5);
+  doc.setFont(undefined, 'normal');
+
+  // Notes text (only if there are notes)
+  if (splitNotes.length > 0) {
+    doc.setFontSize(8);
+    doc.setTextColor(hexToRgb(colors.textSecondary).r, hexToRgb(colors.textSecondary).g, hexToRgb(colors.textSecondary).b);
+    doc.text(splitNotes, margin + 4, notesStartY + 10);
+  }
+
+  // Draw section border around everything (table + notes)
+  const sectionEndY = notesStartY + notesHeight;
+  const borderRgb = hexToRgb(colors.border);
+  doc.setDrawColor(borderRgb.r, borderRgb.g, borderRgb.b);
+  doc.setLineWidth(0.5);
+  doc.roundedRect(margin, 35, contentWidth, sectionEndY - 35 + 2, 3, 3, 'S');
+
+  // Add page numbers
+  addPageNumbers(doc);
 
   doc.save(filename);
 };
@@ -207,6 +252,7 @@ export const exportPDFGrouped = (tasks, monthlyNotes = {}, dateMode = 'draft', f
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 14;
   const contentWidth = pageWidth - (margin * 2);
+  const tableWidth = contentWidth - 2;
   let yPos = 20;
 
   // Title
@@ -225,24 +271,26 @@ export const exportPDFGrouped = (tasks, monthlyNotes = {}, dateMode = 'draft', f
   const dateField = dateMode === 'draft' ? 'draftDue' : 'finalDue';
   const { groups, sortedKeys } = groupTasksByMonth(tasks, dateField);
 
+  // Calculate column widths to fill table width
+  const dateColWidth = 32;
+  const notesColWidth = tableWidth * 0.35;
+  const taskNameColWidth = tableWidth - notesColWidth - (dateColWidth * 2);
+
   sortedKeys.forEach((monthKey) => {
     const monthTasks = groups[monthKey];
     const monthName = getMonthDisplayName(monthKey);
     const headerHeight = 12;
 
     // Estimate section height
-    const estimatedHeight = headerHeight + (monthTasks.length * 10) + 20;
+    const estimatedHeight = headerHeight + (monthTasks.length * 10) + 30;
 
     // Check if we need a new page
-    if (yPos + estimatedHeight > 280) {
+    if (yPos + estimatedHeight > 270) {
       doc.addPage();
       yPos = 20;
     }
 
-    // Draw section border (rounded rectangle)
-    const borderRgb = hexToRgb(colors.border);
-    doc.setDrawColor(borderRgb.r, borderRgb.g, borderRgb.b);
-    doc.setLineWidth(0.5);
+    const sectionStartY = yPos;
 
     // Section header with rounded top corners
     const headerRgb = hexToRgb(colors.header);
@@ -286,12 +334,13 @@ export const exportPDFGrouped = (tasks, monthlyNotes = {}, dateMode = 'draft', f
         fillColor: [255, 255, 255],
       },
       columnStyles: {
-        0: { cellWidth: 45 },
-        1: { cellWidth: 65 },
-        2: { cellWidth: 28, halign: 'center' },
-        3: { cellWidth: 28, halign: 'center' },
+        0: { cellWidth: taskNameColWidth },
+        1: { cellWidth: notesColWidth },
+        2: { cellWidth: dateColWidth, halign: 'center' },
+        3: { cellWidth: dateColWidth, halign: 'center' },
       },
       margin: { left: margin + 1, right: margin + 1 },
+      tableWidth: tableWidth,
       tableLineWidth: 0,
       didDrawCell: function (data) {
         if (data.section === 'body') {
@@ -324,26 +373,46 @@ export const exportPDFGrouped = (tasks, monthlyNotes = {}, dateMode = 'draft', f
 
     const tableEndY = doc.lastAutoTable.finalY;
 
-    // Draw section border around everything
-    doc.setDrawColor(borderRgb.r, borderRgb.g, borderRgb.b);
-    doc.roundedRect(margin, yPos, contentWidth, tableEndY - yPos + 4, 3, 3, 'S');
-
-    yPos = tableEndY + 5;
-
-    // Monthly notes
+    // Notes section inside the box
+    const notesStartY = tableEndY + 6;
     const notes = monthlyNotes[monthKey];
-    if (notes) {
+    const notesText = notes || '';
+    const splitNotes = notesText ? doc.splitTextToSize(notesText, contentWidth - 8) : [];
+    const notesTextHeight = splitNotes.length * 4;
+    const minNotesHeight = 20; // Minimum height for notes section
+    const notesHeight = Math.max(minNotesHeight, notesTextHeight + 10);
+
+    // Draw notes background
+    const notesBgRgb = hexToRgb(colors.surface);
+    doc.setFillColor(notesBgRgb.r, notesBgRgb.g, notesBgRgb.b);
+    doc.rect(margin + 1, notesStartY, contentWidth - 2, notesHeight, 'F');
+
+    // Notes label
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
+    doc.text('Notes:', margin + 4, notesStartY + 5);
+    doc.setFont(undefined, 'normal');
+
+    // Notes text (only if there are notes)
+    if (splitNotes.length > 0) {
       doc.setFontSize(8);
       doc.setTextColor(hexToRgb(colors.textSecondary).r, hexToRgb(colors.textSecondary).g, hexToRgb(colors.textSecondary).b);
-      doc.setFont(undefined, 'italic');
-      const splitNotes = doc.splitTextToSize(`Notes: ${notes}`, pageWidth - 32);
-      doc.text(splitNotes, margin + 2, yPos + 3);
-      yPos += splitNotes.length * 4 + 5;
-      doc.setFont(undefined, 'normal');
+      doc.text(splitNotes, margin + 4, notesStartY + 10);
     }
 
-    yPos += 10;
+    // Draw section border around everything (table + notes)
+    const sectionEndY = notesStartY + notesHeight;
+    const borderRgb = hexToRgb(colors.border);
+    doc.setDrawColor(borderRgb.r, borderRgb.g, borderRgb.b);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(margin, sectionStartY, contentWidth, sectionEndY - sectionStartY + 2, 3, 3, 'S');
+
+    yPos = sectionEndY + 10;
   });
+
+  // Add page numbers
+  addPageNumbers(doc);
 
   doc.save(filename);
 };
@@ -465,11 +534,12 @@ export const exportPDFCalendar = (tasks, dateFilter = 'all', filename = 'tasks-c
 };
 
 // Export PDF - By Company View
-export const exportPDFByCompany = (tasks, companies = [], filename = 'tasks-by-company.pdf') => {
+export const exportPDFByCompany = (tasks, companies = [], companyNotes = {}, filename = 'tasks-by-company.pdf') => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 14;
   const contentWidth = pageWidth - (margin * 2);
+  const tableWidth = contentWidth - 2;
   let yPos = 20;
 
   // Title
@@ -510,6 +580,11 @@ export const exportPDFByCompany = (tasks, companies = [], filename = 'tasks-by-c
     sortedKeys.push('unassigned');
   }
 
+  // Calculate column widths to fill table width
+  const dateColWidth = 32;
+  const notesColWidth = tableWidth * 0.35;
+  const taskNameColWidth = tableWidth - notesColWidth - (dateColWidth * 2);
+
   sortedKeys.forEach((companyId) => {
     const companyTasks = grouped[companyId];
     const company = companies.find(c => c.id === companyId);
@@ -517,18 +592,15 @@ export const exportPDFByCompany = (tasks, companies = [], filename = 'tasks-by-c
     const headerHeight = 12;
 
     // Estimate section height
-    const estimatedHeight = headerHeight + (companyTasks.length * 10) + 20;
+    const estimatedHeight = headerHeight + (companyTasks.length * 10) + 30;
 
     // Check if we need a new page
-    if (yPos + estimatedHeight > 280) {
+    if (yPos + estimatedHeight > 270) {
       doc.addPage();
       yPos = 20;
     }
 
-    // Draw section border (rounded rectangle)
-    const borderRgb = hexToRgb(colors.border);
-    doc.setDrawColor(borderRgb.r, borderRgb.g, borderRgb.b);
-    doc.setLineWidth(0.5);
+    const sectionStartY = yPos;
 
     // Section header with rounded top corners
     const headerRgb = hexToRgb(colors.header);
@@ -572,12 +644,13 @@ export const exportPDFByCompany = (tasks, companies = [], filename = 'tasks-by-c
         fillColor: [255, 255, 255],
       },
       columnStyles: {
-        0: { cellWidth: 45 },
-        1: { cellWidth: 65 },
-        2: { cellWidth: 28, halign: 'center' },
-        3: { cellWidth: 28, halign: 'center' },
+        0: { cellWidth: taskNameColWidth },
+        1: { cellWidth: notesColWidth },
+        2: { cellWidth: dateColWidth, halign: 'center' },
+        3: { cellWidth: dateColWidth, halign: 'center' },
       },
       margin: { left: margin + 1, right: margin + 1 },
+      tableWidth: tableWidth,
       tableLineWidth: 0,
       didDrawCell: function (data) {
         if (data.section === 'body') {
@@ -610,22 +683,57 @@ export const exportPDFByCompany = (tasks, companies = [], filename = 'tasks-by-c
 
     const tableEndY = doc.lastAutoTable.finalY;
 
-    // Draw section border around everything
-    doc.setDrawColor(borderRgb.r, borderRgb.g, borderRgb.b);
-    doc.roundedRect(margin, yPos, contentWidth, tableEndY - yPos + 4, 3, 3, 'S');
+    // Notes section inside the box
+    const notesStartY = tableEndY + 6;
+    const notes = companyNotes[companyId];
+    const notesText = notes || '';
+    const splitNotes = notesText ? doc.splitTextToSize(notesText, contentWidth - 8) : [];
+    const notesTextHeight = splitNotes.length * 4;
+    const minNotesHeight = 20; // Minimum height for notes section
+    const notesHeight = Math.max(minNotesHeight, notesTextHeight + 10);
 
-    yPos = tableEndY + 15;
+    // Draw notes background
+    const notesBgRgb = hexToRgb(colors.surface);
+    doc.setFillColor(notesBgRgb.r, notesBgRgb.g, notesBgRgb.b);
+    doc.rect(margin + 1, notesStartY, contentWidth - 2, notesHeight, 'F');
+
+    // Notes label
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
+    doc.text('Notes:', margin + 4, notesStartY + 5);
+    doc.setFont(undefined, 'normal');
+
+    // Notes text (only if there are notes)
+    if (splitNotes.length > 0) {
+      doc.setFontSize(8);
+      doc.setTextColor(hexToRgb(colors.textSecondary).r, hexToRgb(colors.textSecondary).g, hexToRgb(colors.textSecondary).b);
+      doc.text(splitNotes, margin + 4, notesStartY + 10);
+    }
+
+    // Draw section border around everything (table + notes)
+    const sectionEndY = notesStartY + notesHeight;
+    const borderRgb = hexToRgb(colors.border);
+    doc.setDrawColor(borderRgb.r, borderRgb.g, borderRgb.b);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(margin, sectionStartY, contentWidth, sectionEndY - sectionStartY + 2, 3, 3, 'S');
+
+    yPos = sectionEndY + 10;
   });
+
+  // Add page numbers
+  addPageNumbers(doc);
 
   doc.save(filename);
 };
 
 // Export PDF - By Category View
-export const exportPDFByCategory = (tasks, categories = [], filename = 'tasks-by-category.pdf') => {
+export const exportPDFByCategory = (tasks, categories = [], categoryNotes = {}, filename = 'tasks-by-category.pdf') => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 14;
   const contentWidth = pageWidth - (margin * 2);
+  const tableWidth = contentWidth - 2;
   let yPos = 20;
 
   // Title
@@ -666,6 +774,11 @@ export const exportPDFByCategory = (tasks, categories = [], filename = 'tasks-by
     sortedKeys.push('unassigned');
   }
 
+  // Calculate column widths to fill table width
+  const dateColWidth = 32;
+  const notesColWidth = tableWidth * 0.35;
+  const taskNameColWidth = tableWidth - notesColWidth - (dateColWidth * 2);
+
   sortedKeys.forEach((categoryId) => {
     const categoryTasks = grouped[categoryId];
     const category = categories.find(c => c.id === categoryId);
@@ -673,18 +786,15 @@ export const exportPDFByCategory = (tasks, categories = [], filename = 'tasks-by
     const headerHeight = 12;
 
     // Estimate section height
-    const estimatedHeight = headerHeight + (categoryTasks.length * 10) + 20;
+    const estimatedHeight = headerHeight + (categoryTasks.length * 10) + 30;
 
     // Check if we need a new page
-    if (yPos + estimatedHeight > 280) {
+    if (yPos + estimatedHeight > 270) {
       doc.addPage();
       yPos = 20;
     }
 
-    // Draw section border (rounded rectangle)
-    const borderRgb = hexToRgb(colors.border);
-    doc.setDrawColor(borderRgb.r, borderRgb.g, borderRgb.b);
-    doc.setLineWidth(0.5);
+    const sectionStartY = yPos;
 
     // Section header with rounded top corners
     const headerRgb = hexToRgb(colors.header);
@@ -728,12 +838,13 @@ export const exportPDFByCategory = (tasks, categories = [], filename = 'tasks-by
         fillColor: [255, 255, 255],
       },
       columnStyles: {
-        0: { cellWidth: 45 },
-        1: { cellWidth: 65 },
-        2: { cellWidth: 28, halign: 'center' },
-        3: { cellWidth: 28, halign: 'center' },
+        0: { cellWidth: taskNameColWidth },
+        1: { cellWidth: notesColWidth },
+        2: { cellWidth: dateColWidth, halign: 'center' },
+        3: { cellWidth: dateColWidth, halign: 'center' },
       },
       margin: { left: margin + 1, right: margin + 1 },
+      tableWidth: tableWidth,
       tableLineWidth: 0,
       didDrawCell: function (data) {
         if (data.section === 'body') {
@@ -766,12 +877,46 @@ export const exportPDFByCategory = (tasks, categories = [], filename = 'tasks-by
 
     const tableEndY = doc.lastAutoTable.finalY;
 
-    // Draw section border around everything
-    doc.setDrawColor(borderRgb.r, borderRgb.g, borderRgb.b);
-    doc.roundedRect(margin, yPos, contentWidth, tableEndY - yPos + 4, 3, 3, 'S');
+    // Notes section inside the box
+    const notesStartY = tableEndY + 6;
+    const notes = categoryNotes[categoryId];
+    const notesText = notes || '';
+    const splitNotes = notesText ? doc.splitTextToSize(notesText, contentWidth - 8) : [];
+    const notesTextHeight = splitNotes.length * 4;
+    const minNotesHeight = 20; // Minimum height for notes section
+    const notesHeight = Math.max(minNotesHeight, notesTextHeight + 10);
 
-    yPos = tableEndY + 15;
+    // Draw notes background
+    const notesBgRgb = hexToRgb(colors.surface);
+    doc.setFillColor(notesBgRgb.r, notesBgRgb.g, notesBgRgb.b);
+    doc.rect(margin + 1, notesStartY, contentWidth - 2, notesHeight, 'F');
+
+    // Notes label
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
+    doc.text('Notes:', margin + 4, notesStartY + 5);
+    doc.setFont(undefined, 'normal');
+
+    // Notes text (only if there are notes)
+    if (splitNotes.length > 0) {
+      doc.setFontSize(8);
+      doc.setTextColor(hexToRgb(colors.textSecondary).r, hexToRgb(colors.textSecondary).g, hexToRgb(colors.textSecondary).b);
+      doc.text(splitNotes, margin + 4, notesStartY + 10);
+    }
+
+    // Draw section border around everything (table + notes)
+    const sectionEndY = notesStartY + notesHeight;
+    const borderRgb = hexToRgb(colors.border);
+    doc.setDrawColor(borderRgb.r, borderRgb.g, borderRgb.b);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(margin, sectionStartY, contentWidth, sectionEndY - sectionStartY + 2, 3, 3, 'S');
+
+    yPos = sectionEndY + 10;
   });
+
+  // Add page numbers
+  addPageNumbers(doc);
 
   doc.save(filename);
 };

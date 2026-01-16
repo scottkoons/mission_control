@@ -12,7 +12,7 @@ import { useCompanies } from '../../context/CompanyContext';
 import { useContacts } from '../../context/ContactContext';
 import { formatPhoneNumber } from '../../utils/formatUtils';
 
-const CompanyModal = ({ isOpen, onClose, company = null, onEditContact, onAddContact }) => {
+const CompanyModal = ({ isOpen, onClose, company = null, onEditContact, onAddContact, onSave }) => {
   const { createCompany, updateCompany, deleteCompany } = useCompanies();
   const { getContactsByCompany, updateContact, deleteContactsByCompany, createContact } = useContacts();
   const isEditing = !!company;
@@ -341,7 +341,12 @@ const CompanyModal = ({ isOpen, onClose, company = null, onEditContact, onAddCon
         }
       }
 
-      onClose();
+      // Call onSave callback if provided
+      if (onSave && newCompany) {
+        onSave(newCompany);
+      } else {
+        onClose();
+      }
     }
   };
 

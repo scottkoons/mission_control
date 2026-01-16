@@ -9,7 +9,7 @@ import { useContacts } from '../../context/ContactContext';
 import { useCompanies } from '../../context/CompanyContext';
 import { formatPhoneNumber } from '../../utils/formatUtils';
 
-const ContactModal = ({ isOpen, onClose, contact = null, companyId = null, companyName = '', showCompanySelect = false }) => {
+const ContactModal = ({ isOpen, onClose, contact = null, companyId = null, defaultCompanyId = null, companyName = '', showCompanySelect = false, onSave }) => {
   const { createContact, updateContact, deleteContact } = useContacts();
   const { companies, createCompany } = useCompanies();
   const isEditing = !!contact;
@@ -63,11 +63,11 @@ const ContactModal = ({ isOpen, onClose, contact = null, companyId = null, compa
         notes: '',
         attachments: [],
       });
-      setSelectedCompanyId(companyId || null);
+      setSelectedCompanyId(companyId || defaultCompanyId || null);
     }
     setShowNewCompanyInput(false);
     setNewCompanyName('');
-  }, [contact, companyId, isOpen]);
+  }, [contact, companyId, defaultCompanyId, isOpen]);
 
   // Prevent browser default drag behavior
   useEffect(() => {
@@ -238,11 +238,16 @@ const ContactModal = ({ isOpen, onClose, contact = null, companyId = null, compa
 
     if (isEditing) {
       await updateContact(contact.id, contactData);
+      onClose();
     } else {
-      await createContact(contactData);
+      const newContact = await createContact(contactData);
+      // Call onSave callback if provided
+      if (onSave && newContact) {
+        onSave(newContact);
+      } else {
+        onClose();
+      }
     }
-
-    onClose();
   };
 
   const handleDelete = async () => {

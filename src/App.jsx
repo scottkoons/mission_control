@@ -20,7 +20,7 @@ import { useCategories } from './context/CategoryContext';
 function App() {
   const [currentView, setCurrentView] = useState('grouped');
   const [showImportModal, setShowImportModal] = useState(false);
-  const { tasks, monthlyNotes } = useTasks();
+  const { tasks, monthlyNotes, generalNotes, companyNotes, categoryNotes } = useTasks();
   const { addToast } = useToast();
   const { user, loading: authLoading } = useAuth();
   const { companies } = useCompanies();
@@ -49,16 +49,16 @@ function App() {
       const dateMode = settings.groupedDateMode || 'draft';
 
       if (type === 'flat') {
-        exportPDFFlat(tasks);
+        exportPDFFlat(tasks, generalNotes['flat-view'] || '');
         addToast('PDF (Flat) exported successfully', { type: 'success', duration: 3000 });
       } else if (type === 'grouped') {
         exportPDFGrouped(tasks, monthlyNotes, dateMode);
         addToast('PDF (Grouped) exported successfully', { type: 'success', duration: 3000 });
       } else if (type === 'company') {
-        exportPDFByCompany(tasks, companies);
+        exportPDFByCompany(tasks, companies, companyNotes);
         addToast('PDF (By Company) exported successfully', { type: 'success', duration: 3000 });
       } else if (type === 'category') {
-        exportPDFByCategory(tasks, categories);
+        exportPDFByCategory(tasks, categories, categoryNotes);
         addToast('PDF (By Category) exported successfully', { type: 'success', duration: 3000 });
       }
     } catch (error) {
