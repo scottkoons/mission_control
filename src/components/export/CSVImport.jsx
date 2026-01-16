@@ -106,14 +106,14 @@ const CSVImport = ({ isOpen, onClose }) => {
           updatedAt: new Date().toISOString(),
           createdAt: task.createdAt || new Date().toISOString(),
         };
-        createTask(newTask);
+        await createTask(newTask);
       }
 
       // Import monthly notes
       if (preview.monthlyNotes) {
-        Object.entries(preview.monthlyNotes).forEach(([key, value]) => {
-          updateMonthlyNotes(key, value);
-        });
+        for (const [key, value] of Object.entries(preview.monthlyNotes)) {
+          await updateMonthlyNotes(key, value);
+        }
       }
 
       addToast(`Imported ${preview.tasks.length} task(s) successfully`, { type: 'success' });

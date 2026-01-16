@@ -68,7 +68,10 @@ export const TaskProvider = ({ children }) => {
 
   // Create a new task
   const createTask = useCallback(async (taskData) => {
-    if (!user) return null;
+    if (!user) {
+      console.error('Cannot create task: No user logged in');
+      return null;
+    }
 
     const newTask = {
       id: taskData.id || uuidv4(),
@@ -88,8 +91,13 @@ export const TaskProvider = ({ children }) => {
       updatedAt: new Date().toISOString(),
     };
 
-    await saveTask(user.uid, newTask);
-    return newTask;
+    try {
+      await saveTask(user.uid, newTask);
+      return newTask;
+    } catch (error) {
+      console.error('Error creating task:', error);
+      throw error;
+    }
   }, [user, tasks]);
 
   // Update an existing task

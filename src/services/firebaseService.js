@@ -56,11 +56,21 @@ export const deleteTaskFromDB = async (userId, taskId) => {
 // Subscribe to real-time task updates
 export const subscribeTasks = (userId, callback) => {
   const tasksCol = getUserCollection(userId, 'tasks');
-  const q = query(tasksCol, orderBy('sortOrder', 'asc'));
-  return onSnapshot(q, (snapshot) => {
-    const tasks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    callback(tasks);
-  });
+  // Don't use orderBy - it requires a composite index
+  // Sort in memory instead
+  return onSnapshot(
+    tasksCol,
+    (snapshot) => {
+      const tasks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      // Sort by sortOrder in memory
+      tasks.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      callback(tasks);
+    },
+    (error) => {
+      console.error('Error subscribing to tasks:', error);
+      callback([]);
+    }
+  );
 };
 
 // Monthly Notes
@@ -82,13 +92,20 @@ export const saveMonthlyNote = async (userId, monthKey, content) => {
 // Subscribe to real-time monthly notes updates
 export const subscribeMonthlyNotes = (userId, callback) => {
   const notesCol = getUserCollection(userId, 'monthlyNotes');
-  return onSnapshot(notesCol, (snapshot) => {
-    const notes = {};
-    snapshot.docs.forEach((doc) => {
-      notes[doc.id] = doc.data().content;
-    });
-    callback(notes);
-  });
+  return onSnapshot(
+    notesCol,
+    (snapshot) => {
+      const notes = {};
+      snapshot.docs.forEach((doc) => {
+        notes[doc.id] = doc.data().content;
+      });
+      callback(notes);
+    },
+    (error) => {
+      console.error('Error subscribing to monthly notes:', error);
+      callback({});
+    }
+  );
 };
 
 // Settings
@@ -149,10 +166,17 @@ export const deleteFileFromDB = async (userId, fileId) => {
 // Subscribe to real-time file updates
 export const subscribeFiles = (userId, callback) => {
   const filesCol = getUserCollection(userId, 'files');
-  return onSnapshot(filesCol, (snapshot) => {
-    const files = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    callback(files);
-  });
+  return onSnapshot(
+    filesCol,
+    (snapshot) => {
+      const files = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      callback(files);
+    },
+    (error) => {
+      console.error('Error subscribing to files:', error);
+      callback([]);
+    }
+  );
 };
 
 // Task Attachments (stored in Firebase Storage)
