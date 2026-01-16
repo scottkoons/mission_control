@@ -4,6 +4,7 @@ import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Completed from './pages/Completed';
 import FileCabinet from './pages/FileCabinet';
+import Contacts from './pages/Contacts';
 import Login from './pages/Login';
 import ToastContainer from './components/common/Toast';
 import CSVImport from './components/export/CSVImport';
@@ -110,6 +111,7 @@ function App() {
           />
           <Route path="/completed" element={<Completed />} />
           <Route path="/files" element={<FileCabinet />} />
+          <Route path="/contacts" element={<Contacts />} />
         </Routes>
       </Layout>
       <ToastContainer />

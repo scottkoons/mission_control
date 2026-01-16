@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   CheckCircle2,
   FolderOpen,
+  Users,
   List,
   ListOrdered,
   Calendar,
@@ -136,6 +137,7 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
   const isOnDashboard = location.pathname === '/' || location.pathname === '/dashboard';
   const isOnCompleted = location.pathname === '/completed';
   const isOnFileCabinet = location.pathname === '/files';
+  const isOnContacts = location.pathname === '/contacts';
 
   return (
     <aside
@@ -198,6 +200,12 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
           label="File Cabinet"
           onClick={() => handleNavigate('/files')}
           isActive={isOnFileCabinet}
+        />
+        <NavItem
+          icon={Users}
+          label="Contacts"
+          onClick={() => handleNavigate('/contacts')}
+          isActive={isOnContacts}
         />
 
         {/* Divider */}

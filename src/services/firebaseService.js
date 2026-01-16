@@ -209,3 +209,35 @@ export const deleteAttachment = async (userId, taskId, attachmentId) => {
     console.error('Error deleting attachment:', error);
   }
 };
+
+// Contacts
+export const subscribeContacts = (userId, callback) => {
+  const contactsCol = getUserCollection(userId, 'contacts');
+  return onSnapshot(
+    contactsCol,
+    (snapshot) => {
+      const contacts = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      // Sort by company name, then by contact name
+      contacts.sort((a, b) => {
+        const companyCompare = (a.company || '').localeCompare(b.company || '');
+        if (companyCompare !== 0) return companyCompare;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+      callback(contacts);
+    },
+    (error) => {
+      console.error('Error subscribing to contacts:', error);
+      callback([]);
+    }
+  );
+};
+
+export const saveContact = async (userId, contact) => {
+  const contactDoc = getUserDoc(userId, 'contacts', contact.id);
+  await setDoc(contactDoc, contact);
+};
+
+export const deleteContactFromDB = async (userId, contactId) => {
+  const contactDoc = getUserDoc(userId, 'contacts', contactId);
+  await deleteDoc(contactDoc);
+};

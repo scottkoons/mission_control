@@ -7,6 +7,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
 import { TaskProvider } from './context/TaskContext';
 import { FileProvider } from './context/FileContext';
+import { ContactProvider } from './context/ContactContext';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -17,7 +18,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <ToastProvider>
             <TaskProvider>
               <FileProvider>
-                <App />
+                <ContactProvider>
+                  <App />
+                </ContactProvider>
               </FileProvider>
             </TaskProvider>
           </ToastProvider>
