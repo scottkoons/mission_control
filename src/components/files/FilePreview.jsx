@@ -61,7 +61,7 @@ const FilePreview = ({ file, onClose, onDownload }) => {
       >
         {isImage && (
           <img
-            src={file.data}
+            src={file.storageURL || file.data}
             alt={file.name}
             className="max-w-full max-h-full object-contain rounded-lg"
           />
@@ -71,7 +71,7 @@ const FilePreview = ({ file, onClose, onDownload }) => {
           <div className="bg-white rounded-lg p-4 text-center">
             <p className="text-gray-600 mb-4">PDF Preview</p>
             <iframe
-              src={file.data}
+              src={file.storageURL || file.data}
               title={file.name}
               className="w-[800px] h-[600px] border-0"
             />

@@ -219,9 +219,14 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
   };
 
   const handleDownloadAttachment = (attachment) => {
+    const url = attachment.storageURL || attachment.data;
     const link = document.createElement('a');
-    link.href = attachment.data;
+    link.href = url;
     link.download = attachment.name;
+    // For cross-origin URLs (Firebase Storage), we need to open in new tab
+    if (attachment.storageURL) {
+      link.target = '_blank';
+    }
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -473,7 +478,7 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
                     >
                       {isImage ? (
                         <img
-                          src={attachment.data}
+                          src={attachment.storageURL || attachment.data}
                           alt={attachment.name}
                           className="w-full h-full object-cover"
                         />
