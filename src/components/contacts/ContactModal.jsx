@@ -1,57 +1,75 @@
 import { useState, useEffect, useRef } from 'react';
-import { Mail, Phone, MapPin, Trash2, Upload, X, Download, FileText, Maximize2 } from 'lucide-react';
+import { Mail, Phone, Trash2, Upload, X, Download, FileText, Maximize2, ChevronDown, Plus, Building2 } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import ConfirmModal from '../common/ConfirmModal';
 import FilePreview from '../files/FilePreview';
+import PdfThumbnail from '../files/PdfThumbnail';
 import { useContacts } from '../../context/ContactContext';
+import { useCompanies } from '../../context/CompanyContext';
+import { formatPhoneNumber } from '../../utils/formatUtils';
 
-const ContactModal = ({ isOpen, onClose, contact = null }) => {
+const ContactModal = ({ isOpen, onClose, contact = null, companyId = null, companyName = '', showCompanySelect = false }) => {
   const { createContact, updateContact, deleteContact } = useContacts();
+  const { companies, createCompany } = useCompanies();
   const isEditing = !!contact;
 
   const [formData, setFormData] = useState({
     name: '',
-    company: '',
     title: '',
     email: '',
     phone: '',
-    address: '',
     notes: '',
     attachments: [],
   });
+  const [selectedCompanyId, setSelectedCompanyId] = useState(null);
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  const [showNewCompanyInput, setShowNewCompanyInput] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
   const fileInputRef = useRef(null);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowCompanyDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (contact) {
       setFormData({
         name: contact.name || '',
-        company: contact.company || '',
         title: contact.title || '',
         email: contact.email || '',
         phone: contact.phone || '',
-        address: contact.address || '',
         notes: contact.notes || '',
         attachments: contact.attachments || [],
       });
+      setSelectedCompanyId(contact.companyId || null);
     } else {
       setFormData({
         name: '',
-        company: '',
         title: '',
         email: '',
         phone: '',
-        address: '',
         notes: '',
         attachments: [],
       });
+      setSelectedCompanyId(companyId || null);
     }
-  }, [contact, isOpen]);
+    setShowNewCompanyInput(false);
+    setNewCompanyName('');
+  }, [contact, companyId, isOpen]);
 
-  // Prevent browser default drag behavior when modal is open
+  // Prevent browser default drag behavior
   useEffect(() => {
     if (!isOpen) return;
 
@@ -72,11 +90,12 @@ const ContactModal = ({ isOpen, onClose, contact = null }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const formattedValue = name === 'phone' ? formatPhoneNumber(value) : value;
+    setFormData((prev) => ({ ...prev, [name]: formattedValue }));
   };
 
   const processFiles = (files) => {
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    const maxSize = 10 * 1024 * 1024;
     const allowedTypes = ['image/svg+xml', 'image/png', 'image/jpeg', 'application/pdf'];
 
     for (const file of files) {
@@ -135,6 +154,26 @@ const ContactModal = ({ isOpen, onClose, contact = null }) => {
     processFiles(files);
   };
 
+  const handlePaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const files = [];
+    for (const item of items) {
+      if (item.type.startsWith('image/') || item.type === 'application/pdf') {
+        const file = item.getAsFile();
+        if (file) {
+          files.push(file);
+        }
+      }
+    }
+
+    if (files.length > 0) {
+      e.preventDefault();
+      processFiles(files);
+    }
+  };
+
   const handleRemoveAttachment = (attachmentId) => {
     setFormData((prev) => ({
       ...prev,
@@ -171,17 +210,36 @@ const ContactModal = ({ isOpen, onClose, contact = null }) => {
     }
   };
 
-  const handlePreviewAttachment = (attachment) => {
-    setPreviewFile(attachment);
+  const handleCreateNewCompany = async () => {
+    if (!newCompanyName.trim()) return;
+
+    const newCompany = await createCompany({ name: newCompanyName.trim() });
+    if (newCompany) {
+      setSelectedCompanyId(newCompany.id);
+      setShowNewCompanyInput(false);
+      setNewCompanyName('');
+      setShowCompanyDropdown(false);
+    }
+  };
+
+  const getSelectedCompanyName = () => {
+    if (!selectedCompanyId) return 'No Company (Unassigned)';
+    const company = companies.find(c => c.id === selectedCompanyId);
+    return company?.name || 'Unknown Company';
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const contactData = {
+      ...formData,
+      companyId: selectedCompanyId,
+    };
+
     if (isEditing) {
-      await updateContact(contact.id, formData);
+      await updateContact(contact.id, contactData);
     } else {
-      await createContact(formData);
+      await createContact(contactData);
     }
 
     onClose();
@@ -212,24 +270,130 @@ const ContactModal = ({ isOpen, onClose, contact = null }) => {
       <Modal
         isOpen={isOpen}
         onClose={onClose}
-        title={isEditing ? 'Edit Contact' : 'Add New Contact'}
-        size="lg"
+        title={isEditing ? 'Edit Contact' : 'Add Contact'}
+        size="md"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Company */}
-          <div>
-            <label className="block text-sm font-medium text-text-primary mb-1">
-              Company
-            </label>
-            <input
-              type="text"
-              name="company"
-              value={formData.company}
-              onChange={handleChange}
-              placeholder="Company name"
-              className="w-full bg-surface-hover border border-border rounded-lg px-4 py-2.5 text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
+          {/* Company Selection */}
+          {(showCompanySelect || isEditing) ? (
+            <div>
+              <label className="block text-sm font-medium text-text-primary mb-1">
+                Company
+              </label>
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowCompanyDropdown(!showCompanyDropdown)}
+                  className="w-full flex items-center justify-between bg-surface-hover border border-border rounded-lg px-4 py-2.5 text-left text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <div className="flex items-center gap-2">
+                    <Building2 size={16} className="text-text-muted" />
+                    <span className={selectedCompanyId ? '' : 'text-text-muted'}>
+                      {getSelectedCompanyName()}
+                    </span>
+                  </div>
+                  <ChevronDown size={16} className={`text-text-muted transition-transform ${showCompanyDropdown ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showCompanyDropdown && (
+                  <div className="absolute z-50 w-full mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {/* Unassigned option */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCompanyId(null);
+                        setShowCompanyDropdown(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-surface-hover transition-colors ${
+                        !selectedCompanyId ? 'bg-primary/10 text-primary' : 'text-text-secondary'
+                      }`}
+                    >
+                      <span className="text-sm">No Company (Unassigned)</span>
+                    </button>
+
+                    {/* Divider */}
+                    {companies.length > 0 && <div className="border-t border-border" />}
+
+                    {/* Existing companies */}
+                    {companies.map((company) => (
+                      <button
+                        key={company.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCompanyId(company.id);
+                          setShowCompanyDropdown(false);
+                        }}
+                        className={`w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-surface-hover transition-colors ${
+                          selectedCompanyId === company.id ? 'bg-primary/10 text-primary' : 'text-text-primary'
+                        }`}
+                      >
+                        {company.logo ? (
+                          <img
+                            src={company.logo.storageURL || company.logo.data}
+                            alt=""
+                            className="w-5 h-5 rounded-full object-cover"
+                          />
+                        ) : (
+                          <Building2 size={16} className="text-text-muted" />
+                        )}
+                        <span className="text-sm">{company.name}</span>
+                      </button>
+                    ))}
+
+                    {/* Divider */}
+                    <div className="border-t border-border" />
+
+                    {/* Add new company */}
+                    {showNewCompanyInput ? (
+                      <div className="p-2">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newCompanyName}
+                            onChange={(e) => setNewCompanyName(e.target.value)}
+                            placeholder="Company name"
+                            className="flex-1 bg-surface-hover border border-border rounded px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleCreateNewCompany();
+                              } else if (e.key === 'Escape') {
+                                setShowNewCompanyInput(false);
+                                setNewCompanyName('');
+                              }
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            variant="primary"
+                            size="sm"
+                            onClick={handleCreateNewCompany}
+                            disabled={!newCompanyName.trim()}
+                          >
+                            Add
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowNewCompanyInput(true)}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-primary hover:bg-primary/10 transition-colors"
+                      >
+                        <Plus size={16} />
+                        <span className="text-sm font-medium">Add New Company</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : companyName ? (
+            <div className="bg-surface-hover rounded-lg px-4 py-2 text-sm text-text-secondary">
+              Adding contact to: <span className="font-medium text-text-primary">{companyName}</span>
+            </div>
+          ) : null}
 
           {/* Name */}
           <div>
@@ -316,34 +480,6 @@ const ContactModal = ({ isOpen, onClose, contact = null }) => {
             </div>
           </div>
 
-          {/* Address */}
-          <div>
-            <label className="block text-sm font-medium text-text-primary mb-1">
-              Address
-            </label>
-            <div className="relative">
-              <textarea
-                name="address"
-                value={formData.address}
-                onChange={handleChange}
-                placeholder="Street address, city, state, zip"
-                rows={2}
-                className="w-full bg-surface-hover border border-border rounded-lg px-4 py-2.5 text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-              />
-              {formData.address && (
-                <a
-                  href={`https://maps.google.com/?q=${encodeURIComponent(formData.address)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="absolute right-2 top-2 p-2 rounded-lg hover:bg-primary/20 text-primary transition-colors"
-                  title="Open in Google Maps"
-                >
-                  <MapPin size={18} />
-                </a>
-              )}
-            </div>
-          </div>
-
           {/* Notes */}
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1">
@@ -353,7 +489,7 @@ const ContactModal = ({ isOpen, onClose, contact = null }) => {
               name="notes"
               value={formData.notes}
               onChange={handleChange}
-              placeholder="Additional notes about this contact..."
+              placeholder="Additional notes..."
               rows={3}
               className="w-full bg-surface-hover border border-border rounded-lg px-4 py-2.5 text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary resize-none"
             />
@@ -368,8 +504,10 @@ const ContactModal = ({ isOpen, onClose, contact = null }) => {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
+              onPaste={handlePaste}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
+              tabIndex={0}
+              className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-primary ${
                 isDragging
                   ? 'border-primary bg-primary/10'
                   : 'border-border hover:border-primary/50'
@@ -385,79 +523,55 @@ const ContactModal = ({ isOpen, onClose, contact = null }) => {
               />
               <Upload size={24} className="mx-auto text-text-muted mb-2" />
               <p className="text-sm text-text-secondary">
-                Click to upload or drag and drop
-              </p>
-              <p className="text-xs text-text-muted mt-1">
-                SVG, PNG, JPG or PDF (MAX. 10MB)
+                Drop, paste, or click to upload
               </p>
             </div>
 
-            {/* Uploaded files */}
             {formData.attachments.length > 0 && (
-              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="mt-3 grid grid-cols-3 gap-2">
                 {formData.attachments.map((attachment) => {
                   const isImage = attachment.type.startsWith('image/');
                   const isPDF = attachment.type === 'application/pdf';
-
                   return (
                     <div
                       key={attachment.id}
-                      className="relative group bg-surface-hover rounded-lg overflow-hidden border border-border"
+                      className="relative group aspect-square bg-surface-hover rounded-lg overflow-hidden border border-border"
                     >
-                      {/* Thumbnail */}
-                      <div
-                        className="aspect-square flex items-center justify-center cursor-pointer"
-                        onClick={() => handlePreviewAttachment(attachment)}
-                      >
-                        {isImage ? (
-                          <img
-                            src={attachment.storageURL || attachment.data}
-                            alt={attachment.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex flex-col items-center justify-center text-text-muted">
-                            <FileText size={32} />
-                            <span className="text-xs mt-1">
-                              {isPDF ? 'PDF' : 'File'}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Overlay with actions */}
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      {isImage ? (
+                        <img
+                          src={attachment.storageURL || attachment.data}
+                          alt={attachment.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : isPDF ? (
+                        <PdfThumbnail file={attachment} />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-text-muted">
+                          <FileText size={24} />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
                         <button
                           type="button"
-                          onClick={() => handlePreviewAttachment(attachment)}
-                          className="p-2 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors"
-                          title="Preview"
+                          onClick={() => setPreviewFile(attachment)}
+                          className="p-1.5 rounded bg-white/20 hover:bg-white/30 text-white"
                         >
-                          <Maximize2 size={16} />
+                          <Maximize2 size={14} />
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDownloadAttachment(attachment)}
-                          className="p-2 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors"
-                          title="Download"
+                          className="p-1.5 rounded bg-white/20 hover:bg-white/30 text-white"
                         >
-                          <Download size={16} />
+                          <Download size={14} />
                         </button>
                         <button
                           type="button"
                           onClick={() => handleRemoveAttachment(attachment.id)}
-                          className="p-2 rounded-lg bg-white/20 hover:bg-danger/80 text-white transition-colors"
-                          title="Remove"
+                          className="p-1.5 rounded bg-white/20 hover:bg-danger/80 text-white"
                         >
-                          <X size={16} />
+                          <X size={14} />
                         </button>
-                      </div>
-
-                      {/* Filename */}
-                      <div className="px-2 py-1.5 border-t border-border">
-                        <p className="text-xs text-text-primary truncate" title={attachment.name}>
-                          {attachment.name}
-                        </p>
                       </div>
                     </div>
                   );
@@ -504,7 +618,7 @@ const ContactModal = ({ isOpen, onClose, contact = null }) => {
         confirmVariant="danger"
       />
 
-      {/* File Preview Modal */}
+      {/* File Preview */}
       {previewFile && (
         <FilePreview
           file={previewFile}

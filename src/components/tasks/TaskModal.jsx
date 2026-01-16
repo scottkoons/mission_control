@@ -1,14 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
-import { Upload, X, Copy, Download, FileText, Maximize2 } from 'lucide-react';
+import { Upload, X, Copy, Download, FileText, Maximize2, Building2, ChevronDown } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import FilePreview from '../files/FilePreview';
+import PdfThumbnail from '../files/PdfThumbnail';
 import { useTasks } from '../../context/TaskContext';
+import { useCompanies } from '../../context/CompanyContext';
 import { formatDateForInput, getQuickDates } from '../../utils/dateUtils';
 import { format } from 'date-fns';
 
 const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAttachments = false }) => {
   const { createTask, updateTask, duplicateTask } = useTasks();
+  const { companies } = useCompanies();
   const isEditing = !!task;
 
   const [formData, setFormData] = useState({
@@ -18,14 +21,18 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
     finalDue: '',
     repeat: 'none',
     attachments: [],
+    companyId: null,
   });
   const [isDragging, setIsDragging] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
   const [dateError, setDateError] = useState('');
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
   const fileInputRef = useRef(null);
+  const companyDropdownRef = useRef(null);
 
   useEffect(() => {
     setDateError(''); // Clear any previous error
+    setShowCompanyDropdown(false);
     if (task) {
       setFormData({
         taskName: task.taskName || '',
@@ -34,6 +41,7 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
         finalDue: formatDateForInput(task.finalDue) || '',
         repeat: task.repeat || 'none',
         attachments: task.attachments || [],
+        companyId: task.companyId || null,
       });
     } else {
       // Set default dates based on defaultMonth if provided
@@ -51,9 +59,21 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
         finalDue: '',
         repeat: 'none',
         attachments: [],
+        companyId: null,
       });
     }
   }, [task, defaultMonth, isOpen]);
+
+  // Close company dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (companyDropdownRef.current && !companyDropdownRef.current.contains(e.target)) {
+        setShowCompanyDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Prevent browser default drag behavior when modal is open
   useEffect(() => {
@@ -121,6 +141,11 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
       }
     }
     return '';
+  };
+
+  const getSelectedCompany = () => {
+    if (!formData.companyId) return null;
+    return companies.find(c => c.id === formData.companyId);
   };
 
   const handleChange = (e) => {
@@ -264,6 +289,7 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
       finalDue: formData.finalDue || null,
       repeat: formData.repeat,
       attachments: formData.attachments,
+      companyId: formData.companyId || null,
     };
 
     if (isEditing) {
@@ -323,6 +349,92 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
             className="w-full bg-surface-hover border border-border rounded-lg px-4 py-2.5 text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary resize-none"
           />
         </div>
+
+        {/* Company */}
+        {companies.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-2">
+              Company (optional)
+            </label>
+            <div className="relative" ref={companyDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowCompanyDropdown(!showCompanyDropdown)}
+                className="w-full flex items-center justify-between bg-surface-hover border border-border rounded-lg px-4 py-2.5 text-left focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <div className="flex items-center gap-2">
+                  {getSelectedCompany() ? (
+                    <>
+                      {getSelectedCompany().logo ? (
+                        <img
+                          src={getSelectedCompany().logo.storageURL || getSelectedCompany().logo.data}
+                          alt=""
+                          className="w-5 h-5 rounded-full object-cover"
+                        />
+                      ) : (
+                        <Building2 size={16} className="text-text-muted" />
+                      )}
+                      <span className="text-text-primary">{getSelectedCompany().name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Building2 size={16} className="text-text-muted" />
+                      <span className="text-text-muted">No company linked</span>
+                    </>
+                  )}
+                </div>
+                <ChevronDown size={16} className={`text-text-muted transition-transform ${showCompanyDropdown ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showCompanyDropdown && (
+                <div className="absolute z-50 w-full mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {/* No company option */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, companyId: null }));
+                      setShowCompanyDropdown(false);
+                    }}
+                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-surface-hover transition-colors ${
+                      !formData.companyId ? 'bg-primary/10 text-primary' : 'text-text-secondary'
+                    }`}
+                  >
+                    <span className="text-sm">No company linked</span>
+                  </button>
+
+                  {/* Divider */}
+                  <div className="border-t border-border" />
+
+                  {/* Company list */}
+                  {companies.map((company) => (
+                    <button
+                      key={company.id}
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, companyId: company.id }));
+                        setShowCompanyDropdown(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-surface-hover transition-colors ${
+                        formData.companyId === company.id ? 'bg-primary/10 text-primary' : 'text-text-primary'
+                      }`}
+                    >
+                      {company.logo ? (
+                        <img
+                          src={company.logo.storageURL || company.logo.data}
+                          alt=""
+                          className="w-5 h-5 rounded-full object-cover"
+                        />
+                      ) : (
+                        <Building2 size={16} className="text-text-muted" />
+                      )}
+                      <span className="text-sm">{company.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Dates */}
         <div className="grid grid-cols-2 gap-4">
@@ -500,12 +612,12 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
                           alt={attachment.name}
                           className="w-full h-full object-cover"
                         />
+                      ) : isPDF ? (
+                        <PdfThumbnail file={attachment} />
                       ) : (
                         <div className="flex flex-col items-center justify-center text-text-muted">
                           <FileText size={32} />
-                          <span className="text-xs mt-1">
-                            {isPDF ? 'PDF' : 'File'}
-                          </span>
+                          <span className="text-xs mt-1">File</span>
                         </div>
                       )}
                     </div>

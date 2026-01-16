@@ -14,6 +14,7 @@ import {
   uploadString,
   getDownloadURL,
   deleteObject,
+  getBlob,
 } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
 
@@ -210,19 +211,101 @@ export const deleteAttachment = async (userId, taskId, attachmentId) => {
   }
 };
 
-// Contacts
+// Fetch file bytes from Firebase Storage URL (bypasses CORS)
+export const fetchFileBytes = async (storageURL) => {
+  try {
+    // Extract the storage path from the download URL
+    // Firebase Storage URLs contain the path encoded in the URL
+    const urlObj = new URL(storageURL);
+    const pathMatch = urlObj.pathname.match(/\/o\/(.+?)(\?|$)/);
+    if (!pathMatch) {
+      throw new Error('Invalid storage URL format');
+    }
+    const storagePath = decodeURIComponent(pathMatch[1]);
+    const storageRef = ref(storage, storagePath);
+
+    // Use getBlob to fetch the file (bypasses CORS)
+    const blob = await getBlob(storageRef);
+    const arrayBuffer = await blob.arrayBuffer();
+    return new Uint8Array(arrayBuffer);
+  } catch (error) {
+    console.error('Error fetching file bytes:', error);
+    throw error;
+  }
+};
+
+// Companies
+export const subscribeCompanies = (userId, callback) => {
+  const companiesCol = getUserCollection(userId, 'companies');
+  return onSnapshot(
+    companiesCol,
+    (snapshot) => {
+      const companies = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      companies.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      callback(companies);
+    },
+    (error) => {
+      console.error('Error subscribing to companies:', error);
+      callback([]);
+    }
+  );
+};
+
+export const saveCompany = async (userId, company) => {
+  const companyDoc = getUserDoc(userId, 'companies', company.id);
+  await setDoc(companyDoc, company);
+};
+
+export const deleteCompanyFromDB = async (userId, companyId) => {
+  const companyDoc = getUserDoc(userId, 'companies', companyId);
+  await deleteDoc(companyDoc);
+};
+
+// Company Attachments
+export const uploadCompanyAttachment = async (userId, companyId, attachmentData) => {
+  const storageRef = ref(
+    storage,
+    `users/${userId}/company-attachments/${companyId}/${attachmentData.id}`
+  );
+  await uploadString(storageRef, attachmentData.data, 'data_url');
+  const downloadURL = await getDownloadURL(storageRef);
+
+  return {
+    id: attachmentData.id,
+    name: attachmentData.name,
+    type: attachmentData.type,
+    size: attachmentData.size,
+    uploadedAt: attachmentData.uploadedAt,
+    storageURL: downloadURL,
+  };
+};
+
+export const uploadCompanyLogo = async (userId, companyId, logoData) => {
+  const storageRef = ref(
+    storage,
+    `users/${userId}/company-logos/${companyId}/${logoData.id}`
+  );
+  await uploadString(storageRef, logoData.data, 'data_url');
+  const downloadURL = await getDownloadURL(storageRef);
+
+  return {
+    id: logoData.id,
+    name: logoData.name,
+    type: logoData.type,
+    size: logoData.size,
+    uploadedAt: logoData.uploadedAt,
+    storageURL: downloadURL,
+  };
+};
+
+// Contacts (linked to companies)
 export const subscribeContacts = (userId, callback) => {
   const contactsCol = getUserCollection(userId, 'contacts');
   return onSnapshot(
     contactsCol,
     (snapshot) => {
       const contacts = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      // Sort by company name, then by contact name
-      contacts.sort((a, b) => {
-        const companyCompare = (a.company || '').localeCompare(b.company || '');
-        if (companyCompare !== 0) return companyCompare;
-        return (a.name || '').localeCompare(b.name || '');
-      });
+      contacts.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       callback(contacts);
     },
     (error) => {

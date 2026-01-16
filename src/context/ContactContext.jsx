@@ -43,7 +43,7 @@ export const ContactProvider = ({ children }) => {
     return () => unsubscribe();
   }, [user]);
 
-  // Helper to process attachments - upload to Storage and return metadata
+  // Helper to process attachments
   const processAttachments = async (contactId, attachments) => {
     const processedAttachments = [];
     for (const attachment of attachments) {
@@ -81,14 +81,14 @@ export const ContactProvider = ({ children }) => {
 
     const newContact = {
       id: contactId,
+      companyId: contactData.companyId || null, // Link to company
       name: contactData.name || '',
-      company: contactData.company || '',
       title: contactData.title || '',
       email: contactData.email || '',
       phone: contactData.phone || '',
-      address: contactData.address || '',
       notes: contactData.notes || '',
       attachments: processedAttachments,
+      isPrimary: contactData.isPrimary || false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -139,7 +139,6 @@ export const ContactProvider = ({ children }) => {
       await deleteContactFromDB(user.uid, contact.id);
 
       showDeleteToast(`"${contact.name}" deleted`, async () => {
-        // Undo - restore the contact
         await saveContact(user.uid, contact);
       });
     } catch (error) {
@@ -148,12 +147,27 @@ export const ContactProvider = ({ children }) => {
     }
   }, [user, showDeleteToast, addToast]);
 
+  // Get contacts for a specific company
+  const getContactsByCompany = useCallback((companyId) => {
+    return contacts.filter((c) => c.companyId === companyId);
+  }, [contacts]);
+
+  // Delete all contacts for a company
+  const deleteContactsByCompany = useCallback(async (companyId) => {
+    const companyContacts = contacts.filter((c) => c.companyId === companyId);
+    for (const contact of companyContacts) {
+      await deleteContactFromDB(user.uid, contact.id);
+    }
+  }, [user, contacts]);
+
   const value = {
     contacts,
     loading,
     createContact,
     updateContact,
     deleteContact,
+    getContactsByCompany,
+    deleteContactsByCompany,
   };
 
   return (

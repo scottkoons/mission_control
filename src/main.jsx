@@ -8,6 +8,7 @@ import { ToastProvider } from './context/ToastContext';
 import { TaskProvider } from './context/TaskContext';
 import { FileProvider } from './context/FileContext';
 import { ContactProvider } from './context/ContactContext';
+import { CompanyProvider } from './context/CompanyContext';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -18,9 +19,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <ToastProvider>
             <TaskProvider>
               <FileProvider>
-                <ContactProvider>
-                  <App />
-                </ContactProvider>
+                <CompanyProvider>
+                  <ContactProvider>
+                    <App />
+                  </ContactProvider>
+                </CompanyProvider>
               </FileProvider>
             </TaskProvider>
           </ToastProvider>
