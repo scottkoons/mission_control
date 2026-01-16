@@ -46,6 +46,15 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
     setShowContactDropdown(false);
     setShowCategoryDropdown(false);
     if (task) {
+      // If task has company but no contact, auto-assign company's primary contact
+      let contactId = task.contactId || null;
+      if (task.companyId && !task.contactId) {
+        const company = companies.find(c => c.id === task.companyId);
+        if (company?.primaryContactId) {
+          contactId = company.primaryContactId;
+        }
+      }
+
       setFormData({
         taskName: task.taskName || '',
         notes: task.notes || '',
@@ -54,7 +63,7 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
         repeat: task.repeat || 'none',
         attachments: task.attachments || [],
         companyId: task.companyId || null,
-        contactId: task.contactId || null,
+        contactId: contactId,
         categoryId: task.categoryId || null,
       });
     } else {
@@ -78,7 +87,7 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
         categoryId: null,
       });
     }
-  }, [task, defaultMonth, isOpen]);
+  }, [task, defaultMonth, isOpen, companies]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -175,13 +184,35 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
     return contacts.find(c => c.id === formData.contactId);
   };
 
-  // Get available contacts - if a company is selected, show only that company's contacts
-  // Otherwise show all contacts
+  // Get available contacts - show all contacts, but we'll indicate which are from the selected company
   const getAvailableContacts = () => {
-    if (formData.companyId) {
-      return getContactsByCompany(formData.companyId);
-    }
     return contacts;
+  };
+
+  // Check if a contact belongs to the selected company
+  const isContactInSelectedCompany = (contactId) => {
+    if (!formData.companyId) return true; // No company selected, any contact is fine
+    const contact = contacts.find(c => c.id === contactId);
+    return contact?.companyId === formData.companyId;
+  };
+
+  // Handle contact selection with warning for contacts outside selected company
+  const handleContactSelect = (contact) => {
+    if (formData.companyId && contact.companyId !== formData.companyId) {
+      const contactCompany = companies.find(c => c.id === contact.companyId);
+      const selectedCompany = companies.find(c => c.id === formData.companyId);
+      const contactCompanyName = contactCompany?.name || 'a different company';
+      const selectedCompanyName = selectedCompany?.name || 'the selected company';
+
+      const confirmMessage = `${contact.name} belongs to ${contactCompanyName}, not ${selectedCompanyName}. Do you want to assign this contact anyway?`;
+
+      if (window.confirm(confirmMessage)) {
+        setFormData(prev => ({ ...prev, contactId: contact.id }));
+      }
+    } else {
+      setFormData(prev => ({ ...prev, contactId: contact.id }));
+    }
+    setShowContactDropdown(false);
   };
 
   const getSelectedCategory = () => {
@@ -550,7 +581,7 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
               </button>
 
               {showContactDropdown && (
-                <div className="absolute z-50 w-full mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                <div className="absolute z-50 w-full mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto">
                   {/* No contact option */}
                   <button
                     type="button"
@@ -568,32 +599,77 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
                   {/* Divider */}
                   <div className="border-t border-border" />
 
-                  {/* Contact list */}
-                  {getAvailableContacts().length > 0 ? (
-                    getAvailableContacts().map((contact) => (
-                      <button
-                        key={contact.id}
-                        type="button"
-                        onClick={() => {
-                          setFormData(prev => ({ ...prev, contactId: contact.id }));
-                          setShowContactDropdown(false);
-                        }}
-                        className={`w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-surface-hover transition-colors ${
-                          formData.contactId === contact.id ? 'bg-primary/10 text-primary' : 'text-text-primary'
-                        }`}
-                      >
-                        <User size={16} className="text-text-muted" />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm">{contact.name}</span>
-                          {contact.email && (
-                            <span className="text-xs text-text-muted ml-2">({contact.email})</span>
-                          )}
-                        </div>
-                      </button>
-                    ))
-                  ) : (
+                  {/* Contacts from selected company (if company is selected) */}
+                  {formData.companyId && getContactsByCompany(formData.companyId).length > 0 && (
+                    <>
+                      <div className="px-4 py-1.5 text-xs font-semibold text-text-muted uppercase tracking-wider bg-surface-hover">
+                        {companies.find(c => c.id === formData.companyId)?.name || 'Company'} Contacts
+                      </div>
+                      {getContactsByCompany(formData.companyId).map((contact) => (
+                        <button
+                          key={contact.id}
+                          type="button"
+                          onClick={() => handleContactSelect(contact)}
+                          className={`w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-surface-hover transition-colors ${
+                            formData.contactId === contact.id ? 'bg-primary/10 text-primary' : 'text-text-primary'
+                          }`}
+                        >
+                          <User size={16} className="text-text-muted" />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm">{contact.name}</span>
+                            {contact.email && (
+                              <span className="text-xs text-text-muted ml-2">({contact.email})</span>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Other contacts (contacts not from selected company, or all if no company) */}
+                  {(() => {
+                    const otherContacts = formData.companyId
+                      ? contacts.filter(c => c.companyId !== formData.companyId)
+                      : contacts;
+
+                    if (otherContacts.length === 0) return null;
+
+                    return (
+                      <>
+                        {formData.companyId && getContactsByCompany(formData.companyId).length > 0 && (
+                          <div className="px-4 py-1.5 text-xs font-semibold text-text-muted uppercase tracking-wider bg-surface-hover">
+                            Other Contacts
+                          </div>
+                        )}
+                        {otherContacts.map((contact) => {
+                          const contactCompany = companies.find(c => c.id === contact.companyId);
+                          return (
+                            <button
+                              key={contact.id}
+                              type="button"
+                              onClick={() => handleContactSelect(contact)}
+                              className={`w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-surface-hover transition-colors ${
+                                formData.contactId === contact.id ? 'bg-primary/10 text-primary' : 'text-text-primary'
+                              }`}
+                            >
+                              <User size={16} className="text-text-muted" />
+                              <div className="flex-1 min-w-0">
+                                <span className="text-sm">{contact.name}</span>
+                                {contactCompany && (
+                                  <span className="text-xs text-text-muted ml-2">({contactCompany.name})</span>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+
+                  {/* No contacts message */}
+                  {contacts.length === 0 && (
                     <div className="px-4 py-2.5 text-sm text-text-muted">
-                      {formData.companyId ? 'No contacts for this company' : 'No contacts available'}
+                      No contacts available
                     </div>
                   )}
                 </div>
