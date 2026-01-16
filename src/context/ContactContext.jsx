@@ -6,6 +6,7 @@ import {
   subscribeContacts,
   saveContact,
   deleteContactFromDB,
+  uploadContactAttachment,
 } from '../services/firebaseService';
 
 const ContactContext = createContext();
@@ -42,11 +43,44 @@ export const ContactProvider = ({ children }) => {
     return () => unsubscribe();
   }, [user]);
 
+  // Helper to process attachments - upload to Storage and return metadata
+  const processAttachments = async (contactId, attachments) => {
+    const processedAttachments = [];
+    for (const attachment of attachments) {
+      if (attachment.storageURL) {
+        processedAttachments.push(attachment);
+      } else if (attachment.data) {
+        try {
+          const uploaded = await uploadContactAttachment(user.uid, contactId, attachment);
+          processedAttachments.push(uploaded);
+        } catch (error) {
+          console.error('Error uploading attachment:', error);
+          processedAttachments.push({
+            id: attachment.id,
+            name: attachment.name,
+            type: attachment.type,
+            size: attachment.size,
+            uploadedAt: attachment.uploadedAt,
+            error: 'Failed to upload',
+          });
+        }
+      }
+    }
+    return processedAttachments;
+  };
+
   const createContact = useCallback(async (contactData) => {
     if (!user) return null;
 
+    const contactId = uuidv4();
+
+    // Process attachments
+    const processedAttachments = contactData.attachments?.length > 0
+      ? await processAttachments(contactId, contactData.attachments)
+      : [];
+
     const newContact = {
-      id: uuidv4(),
+      id: contactId,
       name: contactData.name || '',
       company: contactData.company || '',
       title: contactData.title || '',
@@ -54,6 +88,7 @@ export const ContactProvider = ({ children }) => {
       phone: contactData.phone || '',
       address: contactData.address || '',
       notes: contactData.notes || '',
+      attachments: processedAttachments,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -75,9 +110,15 @@ export const ContactProvider = ({ children }) => {
     const contact = contacts.find((c) => c.id === contactId);
     if (!contact) return;
 
+    // Process attachments if they're being updated
+    let processedUpdates = { ...updates };
+    if (updates.attachments?.length > 0) {
+      processedUpdates.attachments = await processAttachments(contactId, updates.attachments);
+    }
+
     const updatedContact = {
       ...contact,
-      ...updates,
+      ...processedUpdates,
       updatedAt: new Date().toISOString(),
     };
 

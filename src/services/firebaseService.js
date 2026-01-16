@@ -241,3 +241,22 @@ export const deleteContactFromDB = async (userId, contactId) => {
   const contactDoc = getUserDoc(userId, 'contacts', contactId);
   await deleteDoc(contactDoc);
 };
+
+// Contact Attachments
+export const uploadContactAttachment = async (userId, contactId, attachmentData) => {
+  const storageRef = ref(
+    storage,
+    `users/${userId}/contact-attachments/${contactId}/${attachmentData.id}`
+  );
+  await uploadString(storageRef, attachmentData.data, 'data_url');
+  const downloadURL = await getDownloadURL(storageRef);
+
+  return {
+    id: attachmentData.id,
+    name: attachmentData.name,
+    type: attachmentData.type,
+    size: attachmentData.size,
+    uploadedAt: attachmentData.uploadedAt,
+    storageURL: downloadURL,
+  };
+};
