@@ -34,9 +34,9 @@ const FileCard = ({ file, onPreview, onDownload, onDelete }) => {
     >
       {/* Thumbnail area */}
       <div className="aspect-square flex items-center justify-center bg-surface-hover p-4">
-        {isImage && file.data ? (
+        {isImage && (file.storageURL || file.data) ? (
           <img
-            src={file.data}
+            src={file.storageURL || file.data}
             alt={file.name}
             className="max-w-full max-h-full object-contain"
           />
