@@ -4,9 +4,11 @@ import { format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns
 import CalendarGrid from './CalendarGrid';
 import { useTheme } from '../../context/ThemeContext';
 import { useToast } from '../../context/ToastContext';
+import { useTasks } from '../../context/TaskContext';
 import { exportPDFCalendar } from '../../utils/pdfUtils';
 
 const CalendarView = ({ tasks, onEditTask }) => {
+  const { updateTask } = useTasks();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dateFilter, setDateFilter] = useState('all'); // 'draft' | 'final' | 'all'
   const { theme } = useTheme();
@@ -57,6 +59,19 @@ const CalendarView = ({ tasks, onEditTask }) => {
     } catch (error) {
       console.error('PDF export error:', error);
       addToast('Error exporting calendar PDF', { type: 'error' });
+    }
+  };
+
+  const handleDateChange = async (taskId, dateType, newDate) => {
+    try {
+      const updates = dateType === 'draft'
+        ? { draftDue: newDate }
+        : { finalDue: newDate };
+      await updateTask(taskId, updates);
+      addToast(`${dateType === 'draft' ? 'Draft' : 'Final'} date updated`, { type: 'success', duration: 2000 });
+    } catch (error) {
+      console.error('Error updating date:', error);
+      addToast('Error updating date', { type: 'error' });
     }
   };
 
@@ -142,6 +157,7 @@ const CalendarView = ({ tasks, onEditTask }) => {
         tasks={filteredTasks}
         dateFilter={dateFilter}
         onEditTask={onEditTask}
+        onDateChange={handleDateChange}
       />
     </div>
   );

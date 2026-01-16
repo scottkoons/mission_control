@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   startOfMonth,
   endOfMonth,
@@ -14,7 +14,8 @@ import {
 } from 'date-fns';
 import CalendarTask from './CalendarTask';
 
-const CalendarGrid = ({ currentDate, tasks, dateFilter, onEditTask }) => {
+const CalendarGrid = ({ currentDate, tasks, dateFilter, onEditTask, onDateChange }) => {
+  const [dragOverDate, setDragOverDate] = useState(null);
   const days = useMemo(() => {
     const monthStart = startOfMonth(currentDate);
     const monthEnd = endOfMonth(currentDate);
@@ -81,6 +82,44 @@ const CalendarGrid = ({ currentDate, tasks, dateFilter, onEditTask }) => {
 
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+  const handleDragOver = (e, day) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverDate(day.toISOString());
+  };
+
+  const handleDragLeave = () => {
+    setDragOverDate(null);
+  };
+
+  const handleDrop = (e, day) => {
+    e.preventDefault();
+    setDragOverDate(null);
+
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('application/json'));
+      const newDate = format(day, 'yyyy-MM-dd');
+
+      // Validate: final date cannot be before draft date
+      if (data.dateType === 'final' && data.currentDraftDue) {
+        if (newDate < data.currentDraftDue) {
+          return; // Don't allow moving final before draft
+        }
+      }
+
+      // Validate: draft date cannot be after final date
+      if (data.dateType === 'draft' && data.currentFinalDue) {
+        if (newDate > data.currentFinalDue) {
+          return; // Don't allow moving draft after final
+        }
+      }
+
+      onDateChange?.(data.taskId, data.dateType, newDate);
+    } catch (error) {
+      console.error('Drop error:', error);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-surface rounded-xl border border-border overflow-hidden">
       {/* Week day headers */}
@@ -101,13 +140,17 @@ const CalendarGrid = ({ currentDate, tasks, dateFilter, onEditTask }) => {
           const dayTasks = getTasksForDay(day);
           const isCurrentMonth = isSameMonth(day, currentDate);
           const isDayToday = isToday(day);
+          const isDragOver = dragOverDate === day.toISOString();
 
           return (
             <div
               key={day.toISOString()}
-              className={`min-h-[100px] p-1 ${
+              onDragOver={(e) => handleDragOver(e, day)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, day)}
+              className={`min-h-[100px] p-1 transition-colors ${
                 isCurrentMonth ? 'bg-surface' : 'bg-surface-hover/50'
-              }`}
+              } ${isDragOver ? 'bg-primary/20 ring-2 ring-primary ring-inset' : ''}`}
             >
               {/* Day number */}
               <div className="flex justify-end mb-1">

@@ -1,8 +1,19 @@
 import { useTheme } from '../../context/ThemeContext';
 import { getDateStatus } from '../../utils/dateUtils';
 
-const CalendarTask = ({ task, onClick }) => {
+const CalendarTask = ({ task, onClick, onDragStart }) => {
   const { theme } = useTheme();
+
+  const handleDragStart = (e) => {
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      taskId: task.id,
+      dateType: task.displayType === 'both' ? 'final' : task.displayType,
+      currentDraftDue: task.draftDue,
+      currentFinalDue: task.finalDue,
+    }));
+    e.dataTransfer.effectAllowed = 'move';
+    onDragStart?.();
+  };
 
   // Get the relevant date and completion status based on display type
   const getDateAndStatus = () => {
@@ -54,14 +65,16 @@ const CalendarTask = ({ task, onClick }) => {
 
   return (
     <button
+      draggable
+      onDragStart={handleDragStart}
       onClick={onClick}
-      className="w-full text-left px-2 py-1 rounded text-xs truncate border-l-2 transition-opacity hover:opacity-80"
+      className="w-full text-left px-2 py-1 rounded text-xs truncate border-l-2 transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing"
       style={{
         background: background,
         borderLeftColor: color,
         color: color,
       }}
-      title={`${prefix}${task.taskName}`}
+      title={`${prefix}${task.taskName} (drag to reschedule)`}
     >
       {prefix}{task.taskName}
     </button>

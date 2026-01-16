@@ -218,18 +218,36 @@ const TaskModal = ({ isOpen, onClose, task = null, defaultMonth = null, focusAtt
     }));
   };
 
-  const handleDownloadAttachment = (attachment) => {
+  const handleDownloadAttachment = async (attachment) => {
     const url = attachment.storageURL || attachment.data;
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = attachment.name;
-    // For cross-origin URLs (Firebase Storage), we need to open in new tab
+
+    // For Firebase Storage URLs, fetch as blob to force download
     if (attachment.storageURL) {
-      link.target = '_blank';
+      try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = attachment.name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      } catch (error) {
+        console.error('Download error:', error);
+        // Fallback to opening in new tab
+        window.open(url, '_blank');
+      }
+    } else {
+      // For data URLs, direct download works
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = attachment.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   const handlePreviewAttachment = (attachment) => {

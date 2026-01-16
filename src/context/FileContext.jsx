@@ -73,15 +73,36 @@ export const FileProvider = ({ children }) => {
     }
   }, [user, showDeleteToast, addToast]);
 
-  const downloadFile = useCallback((file) => {
-    const link = document.createElement('a');
-    // Use storageURL if available, otherwise use data
-    link.href = file.storageURL || file.data;
-    link.download = file.name;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const downloadFile = useCallback(async (file) => {
+    const url = file.storageURL || file.data;
+
+    // For Firebase Storage URLs, fetch as blob to force download
+    if (file.storageURL) {
+      try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = file.name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      } catch (error) {
+        console.error('Download error:', error);
+        // Fallback to opening in new tab
+        window.open(url, '_blank');
+      }
+    } else {
+      // For data URLs, direct download works
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = file.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   }, []);
 
   const value = {
