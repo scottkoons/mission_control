@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Trash2, GripVertical, ChevronDown, ChevronRight, Paperclip, X, FileText, Image, File } from 'lucide-react';
+import { Plus, Trash2, GripVertical, ChevronDown, ChevronRight, Paperclip, X, FileText, Maximize2, Download } from 'lucide-react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useTodos } from '../context/TodoContext';
 import { v4 as uuidv4 } from 'uuid';
+import FilePreview from '../components/files/FilePreview';
+import PdfThumbnail from '../components/files/PdfThumbnail';
 
 const SortableTodoItem = ({ todo, onToggle, onUpdate, onDelete, onExpand, isExpanded }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -12,6 +14,7 @@ const SortableTodoItem = ({ todo, onToggle, onUpdate, onDelete, onExpand, isExpa
   const [editNotes, setEditNotes] = useState(todo.notes || '');
   const [attachments, setAttachments] = useState(todo.attachments || []);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [previewFile, setPreviewFile] = useState(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -109,16 +112,36 @@ const SortableTodoItem = ({ todo, onToggle, onUpdate, onDelete, onExpand, isExpa
     onUpdate(todo.id, { attachments: updatedAttachments });
   };
 
-  const getFileIcon = (type) => {
-    if (type?.startsWith('image/')) return <Image size={14} className="text-blue-500" />;
-    if (type?.includes('pdf')) return <FileText size={14} className="text-red-500" />;
-    return <File size={14} className="text-text-muted" />;
+  const handlePreviewAttachment = (attachment) => {
+    setPreviewFile(attachment);
   };
 
-  const formatFileSize = (bytes) => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  const handleDownloadAttachment = async (attachment) => {
+    const url = attachment.storageURL || attachment.data;
+    if (attachment.storageURL) {
+      try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = attachment.name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      } catch (error) {
+        console.error('Download error:', error);
+        window.open(url, '_blank');
+      }
+    } else {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = attachment.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -255,38 +278,78 @@ const SortableTodoItem = ({ todo, onToggle, onUpdate, onDelete, onExpand, isExpa
           {attachments.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-text-muted">Attachments</p>
-              <div className="flex flex-wrap gap-2">
-                {attachments.map((attachment) => (
-                  <div
-                    key={attachment.id}
-                    className="flex items-center gap-2 bg-surface-hover border border-border rounded-lg px-2 py-1 group"
-                  >
-                    {getFileIcon(attachment.type)}
-                    <a
-                      href={attachment.storageURL || attachment.data}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-text-primary hover:text-primary truncate max-w-32"
-                      title={attachment.name}
+              <div className="grid grid-cols-4 gap-2">
+                {attachments.map((attachment) => {
+                  const isImage = attachment.type?.startsWith('image/');
+                  const isPDF = attachment.type === 'application/pdf';
+                  return (
+                    <div
+                      key={attachment.id}
+                      className="relative group bg-surface-hover rounded-lg overflow-hidden border border-border"
                     >
-                      {attachment.name}
-                    </a>
-                    <span className="text-xs text-text-muted">
-                      {formatFileSize(attachment.size)}
-                    </span>
-                    <button
-                      onClick={() => handleRemoveAttachment(attachment.id)}
-                      className="p-0.5 text-text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Remove"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
+                      <div
+                        className="aspect-square flex items-center justify-center cursor-pointer"
+                        onClick={() => handlePreviewAttachment(attachment)}
+                      >
+                        {isImage ? (
+                          <img
+                            src={attachment.storageURL || attachment.data}
+                            alt={attachment.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : isPDF ? (
+                          <PdfThumbnail file={attachment} />
+                        ) : (
+                          <FileText size={24} className="text-text-muted" />
+                        )}
+                      </div>
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handlePreviewAttachment(attachment)}
+                          className="p-1.5 rounded bg-white/20 hover:bg-white/30 text-white"
+                          title="Preview"
+                        >
+                          <Maximize2 size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadAttachment(attachment)}
+                          className="p-1.5 rounded bg-white/20 hover:bg-white/30 text-white"
+                          title="Download"
+                        >
+                          <Download size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAttachment(attachment.id)}
+                          className="p-1.5 rounded bg-white/20 hover:bg-danger/80 text-white"
+                          title="Remove"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                      <div className="px-1.5 py-1 border-t border-border">
+                        <p className="text-xs text-text-primary truncate" title={attachment.name}>
+                          {attachment.name}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
         </div>
+      )}
+
+      {/* File Preview Modal */}
+      {previewFile && (
+        <FilePreview
+          file={previewFile}
+          onClose={() => setPreviewFile(null)}
+          onDownload={() => handleDownloadAttachment(previewFile)}
+        />
       )}
     </div>
   );
