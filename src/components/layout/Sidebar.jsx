@@ -18,6 +18,7 @@ import {
   Sun,
   Monitor,
   LogOut,
+  ListTodo,
 } from 'lucide-react';
 import { useTasks } from '../../context/TaskContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -140,6 +141,7 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
   const isOnFileCabinet = location.pathname === '/files';
   const isOnContacts = location.pathname === '/contacts';
   const isOnCategories = location.pathname === '/categories';
+  const isOnTodos = location.pathname === '/todos';
 
   return (
     <aside
@@ -217,6 +219,12 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
           label="Categories"
           onClick={() => handleNavigate('/categories')}
           isActive={isOnCategories}
+        />
+        <NavItem
+          icon={ListTodo}
+          label="Quick Notes"
+          onClick={() => handleNavigate('/todos')}
+          isActive={isOnTodos}
         />
 
         {/* Divider */}

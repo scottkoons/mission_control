@@ -10,6 +10,7 @@ import { FileProvider } from './context/FileContext';
 import { ContactProvider } from './context/ContactContext';
 import { CompanyProvider } from './context/CompanyContext';
 import { CategoryProvider } from './context/CategoryContext';
+import { TodoProvider } from './context/TodoContext';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -23,7 +24,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <CompanyProvider>
                   <ContactProvider>
                     <CategoryProvider>
-                      <App />
+                      <TodoProvider>
+                        <App />
+                      </TodoProvider>
                     </CategoryProvider>
                   </ContactProvider>
                 </CompanyProvider>

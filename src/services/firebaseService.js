@@ -492,3 +492,29 @@ export const deleteCategoryFromDB = async (userId, categoryId) => {
   const categoryDoc = getUserDoc(userId, 'categories', categoryId);
   await deleteDoc(categoryDoc);
 };
+
+// Todos (Quick Notes)
+export const subscribeTodos = (userId, callback) => {
+  const todosCol = getUserCollection(userId, 'todos');
+  return onSnapshot(
+    todosCol,
+    (snapshot) => {
+      const todos = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      callback(todos);
+    },
+    (error) => {
+      console.error('Error subscribing to todos:', error);
+      callback([]);
+    }
+  );
+};
+
+export const saveTodo = async (userId, todo) => {
+  const todoDoc = getUserDoc(userId, 'todos', todo.id);
+  await setDoc(todoDoc, todo);
+};
+
+export const deleteTodoFromDB = async (userId, todoId) => {
+  const todoDoc = getUserDoc(userId, 'todos', todoId);
+  await deleteDoc(todoDoc);
+};

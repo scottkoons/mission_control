@@ -6,6 +6,7 @@ import Completed from './pages/Completed';
 import FileCabinet from './pages/FileCabinet';
 import Contacts from './pages/Contacts';
 import Categories from './pages/Categories';
+import TodoList from './pages/TodoList';
 import Login from './pages/Login';
 import ToastContainer from './components/common/Toast';
 import CSVImport from './components/export/CSVImport';
@@ -124,6 +125,7 @@ function App() {
           <Route path="/files" element={<FileCabinet />} />
           <Route path="/contacts" element={<Contacts />} />
           <Route path="/categories" element={<Categories />} />
+          <Route path="/todos" element={<TodoList />} />
         </Routes>
       </Layout>
       <ToastContainer />
