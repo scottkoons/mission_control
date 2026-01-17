@@ -319,6 +319,24 @@ export const TaskProvider = ({ children }) => {
     }
   }, [user, tasks, tasksWithRecurring, updateTask]);
 
+  // Complete task directly (for unscheduled tasks)
+  const completeTask = useCallback(async (taskId) => {
+    const task = tasksWithRecurring.find((t) => t.id === taskId);
+    if (task) {
+      const updates = {
+        completedAt: task.completedAt ? null : new Date().toISOString(),
+        draftComplete: !task.completedAt,
+        finalComplete: !task.completedAt,
+      };
+
+      if (task.isRecurring && !tasks.find((t) => t.id === taskId)) {
+        await saveTask(user.uid, { ...task, ...updates });
+      } else {
+        await updateTask(taskId, updates);
+      }
+    }
+  }, [user, tasks, tasksWithRecurring, updateTask]);
+
   // Update sort order
   const updateSortOrder = useCallback(async (taskIds) => {
     if (!user) return;
@@ -409,6 +427,7 @@ export const TaskProvider = ({ children }) => {
     duplicateTask,
     toggleDraftComplete,
     toggleFinalComplete,
+    completeTask,
     updateSortOrder,
     updateMonthlyNotes,
     updateCompanyNotes,

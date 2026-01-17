@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { GripVertical, Trash2, Paperclip } from 'lucide-react';
+import { GripVertical, Trash2, Paperclip, CheckCircle2 } from 'lucide-react';
 import DateBadge from './DateBadge';
 import ConfirmModal from '../common/ConfirmModal';
 import { useTasks } from '../../context/TaskContext';
@@ -7,9 +7,15 @@ import { useTasks } from '../../context/TaskContext';
 const CompletedTaskRow = ({ task, onEdit }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const { toggleDraftComplete, toggleFinalComplete, deleteTask } = useTasks();
+  const { toggleDraftComplete, toggleFinalComplete, deleteTask, completeTask } = useTasks();
 
   const hasAttachments = task.attachments && task.attachments.length > 0;
+  const isUnscheduled = !task.draftDue && !task.finalDue;
+
+  const handleCompleteClick = (e) => {
+    e.stopPropagation();
+    completeTask(task.id);
+  };
 
   const handleRowClick = () => {
     onEdit(task);
@@ -75,6 +81,16 @@ const CompletedTaskRow = ({ task, onEdit }) => {
       {/* Info/Actions */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
+          {/* Complete checkbox for unscheduled tasks */}
+          {isUnscheduled && (
+            <button
+              onClick={handleCompleteClick}
+              className="p-1 rounded transition-colors text-success hover:text-success/80"
+              title="Mark incomplete"
+            >
+              <CheckCircle2 size={16} />
+            </button>
+          )}
           {hasAttachments && (
             <span className="text-secondary p-1">
               <Paperclip size={16} />

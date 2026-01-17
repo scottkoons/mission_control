@@ -333,6 +333,25 @@ export const deleteAttachment = async (userId, taskId, attachmentId) => {
   }
 };
 
+// Upload attachment for todo items
+export const uploadTodoAttachment = async (userId, todoId, attachmentData) => {
+  const storageRef = ref(
+    storage,
+    `users/${userId}/todo-attachments/${todoId}/${attachmentData.id}`
+  );
+  await uploadString(storageRef, attachmentData.data, 'data_url');
+  const downloadURL = await getDownloadURL(storageRef);
+
+  return {
+    id: attachmentData.id,
+    name: attachmentData.name,
+    type: attachmentData.type,
+    size: attachmentData.size,
+    uploadedAt: attachmentData.uploadedAt,
+    storageURL: downloadURL,
+  };
+};
+
 // Fetch file bytes from Firebase Storage URL (bypasses CORS)
 export const fetchFileBytes = async (storageURL) => {
   try {

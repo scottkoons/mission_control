@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
-import { subscribeTodos, saveTodo, deleteTodoFromDB } from '../services/firebaseService';
+import { subscribeTodos, saveTodo, deleteTodoFromDB, uploadTodoAttachment } from '../services/firebaseService';
 import { v4 as uuidv4 } from 'uuid';
 
 const TodoContext = createContext();
@@ -37,6 +37,32 @@ export const TodoProvider = ({ children }) => {
     return () => unsubscribe();
   }, [user]);
 
+  // Helper to process attachments - upload to Storage and return metadata
+  const processAttachments = async (todoId, attachments) => {
+    const processedAttachments = [];
+    for (const attachment of attachments) {
+      if (attachment.storageURL) {
+        processedAttachments.push(attachment);
+      } else if (attachment.data) {
+        try {
+          const uploaded = await uploadTodoAttachment(user.uid, todoId, attachment);
+          processedAttachments.push(uploaded);
+        } catch (error) {
+          console.error('Error uploading attachment:', error);
+          processedAttachments.push({
+            id: attachment.id,
+            name: attachment.name,
+            type: attachment.type,
+            size: attachment.size,
+            uploadedAt: attachment.uploadedAt,
+            error: 'Failed to upload',
+          });
+        }
+      }
+    }
+    return processedAttachments;
+  };
+
   const createTodo = useCallback(async (text = '') => {
     if (!user) return null;
 
@@ -45,6 +71,7 @@ export const TodoProvider = ({ children }) => {
       text: text,
       notes: '',
       completed: false,
+      attachments: [],
       order: todos.length,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -66,9 +93,15 @@ export const TodoProvider = ({ children }) => {
     const todo = todos.find(t => t.id === todoId);
     if (!todo) return;
 
+    // Process attachments if they're being updated
+    let processedUpdates = { ...updates };
+    if (updates.attachments?.length > 0) {
+      processedUpdates.attachments = await processAttachments(todoId, updates.attachments);
+    }
+
     const updatedTodo = {
       ...todo,
-      ...updates,
+      ...processedUpdates,
       updatedAt: new Date().toISOString(),
     };
 

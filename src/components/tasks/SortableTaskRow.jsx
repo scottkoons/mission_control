@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useState } from 'react';
-import { GripVertical, Trash2, Paperclip, User } from 'lucide-react';
+import { GripVertical, Trash2, Paperclip, User, CheckCircle2, Circle } from 'lucide-react';
 import DateBadge from './DateBadge';
 import ConfirmModal from '../common/ConfirmModal';
 import { useTasks } from '../../context/TaskContext';
@@ -9,7 +9,7 @@ import { useTasks } from '../../context/TaskContext';
 const SortableTaskRow = ({ task, onEdit }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const { toggleDraftComplete, toggleFinalComplete, deleteTask } = useTasks();
+  const { toggleDraftComplete, toggleFinalComplete, deleteTask, completeTask } = useTasks();
 
   const {
     attributes,
@@ -28,6 +28,12 @@ const SortableTaskRow = ({ task, onEdit }) => {
 
   const hasAttachments = task.attachments && task.attachments.length > 0;
   const hasContact = !!task.contactId;
+  const isUnscheduled = !task.draftDue && !task.finalDue;
+
+  const handleCompleteClick = (e) => {
+    e.stopPropagation();
+    completeTask(task.id);
+  };
 
   const handleRowClick = () => {
     onEdit(task);
@@ -105,6 +111,21 @@ const SortableTaskRow = ({ task, onEdit }) => {
       {/* Info/Actions */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
+          {/* Complete checkbox for unscheduled tasks */}
+          {isUnscheduled && (
+            <button
+              onClick={handleCompleteClick}
+              className={`p-1 rounded transition-colors ${
+                task.completedAt
+                  ? 'text-success hover:text-success/80'
+                  : 'text-text-muted hover:text-success'
+              }`}
+              title={task.completedAt ? 'Mark incomplete' : 'Mark complete'}
+            >
+              {task.completedAt ? <CheckCircle2 size={16} /> : <Circle size={16} />}
+            </button>
+          )}
+
           {/* Contact indicator */}
           <div
             className={`p-1 ${
