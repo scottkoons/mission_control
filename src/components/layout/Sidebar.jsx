@@ -284,24 +284,9 @@ const Sidebar = ({ onViewChange, currentView, onExportPDF, onExportCSV, onImport
         {/* Export Section */}
         <SectionHeader>Export</SectionHeader>
         <NavItem
-          icon={ListOrdered}
-          label="PDF - Grouped"
-          onClick={() => onExportPDF('grouped')}
-        />
-        <NavItem
-          icon={List}
-          label="PDF - Flat"
-          onClick={() => onExportPDF('flat')}
-        />
-        <NavItem
-          icon={Building2}
-          label="PDF - Company"
-          onClick={() => onExportPDF('company')}
-        />
-        <NavItem
-          icon={Tag}
-          label="PDF - Category"
-          onClick={() => onExportPDF('category')}
+          icon={Download}
+          label="Export PDF"
+          onClick={() => onExportPDF(currentView)}
         />
         <NavItem
           icon={Download}

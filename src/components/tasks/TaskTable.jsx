@@ -18,7 +18,7 @@ import SortableTaskRow from './SortableTaskRow';
 import { multiSort, SORT_ASC, SORT_DESC, toggleDirection } from '../../utils/sortUtils';
 import { useTasks } from '../../context/TaskContext';
 
-const TaskTable = ({ tasks, onEditTask }) => {
+const TaskTable = ({ tasks, onEditTask, onManualSort, getReorderGroup }) => {
   const [sortField, setSortField] = useState(null);
   const [sortDirection, setSortDirection] = useState(SORT_ASC);
   const { updateSortOrder } = useTasks();
@@ -51,10 +51,24 @@ const TaskTable = ({ tasks, onEditTask }) => {
     const { active, over } = event;
 
     if (active.id !== over?.id) {
+      const draggedTask = sortedTasks.find((t) => t.id === active.id);
       const oldIndex = sortedTasks.findIndex((t) => t.id === active.id);
       const newIndex = sortedTasks.findIndex((t) => t.id === over.id);
       const newOrder = arrayMove(sortedTasks, oldIndex, newIndex);
-      updateSortOrder(newOrder.map((t) => t.id));
+
+      // If getReorderGroup is provided, only update tasks in the same group
+      // (e.g., same month for flat view to stay consistent with grouped view)
+      if (getReorderGroup && draggedTask) {
+        const groupTasks = getReorderGroup(draggedTask);
+        const groupIds = new Set(groupTasks.map((t) => t.id));
+        const groupOrder = newOrder.filter((t) => groupIds.has(t.id));
+        updateSortOrder(groupOrder.map((t) => t.id));
+      } else {
+        updateSortOrder(newOrder.map((t) => t.id));
+      }
+
+      // Switch to manual sort mode when user drags a task
+      onManualSort?.();
     }
   };
 

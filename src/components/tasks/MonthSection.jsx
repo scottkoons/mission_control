@@ -3,7 +3,7 @@ import TaskTable from './TaskTable';
 import MonthlyNotes from './MonthlyNotes';
 import { getMonthDisplayName } from '../../utils/dateUtils';
 
-const MonthSection = ({ monthKey, tasks, onEditTask, onAddTask }) => {
+const MonthSection = ({ monthKey, tasks, onEditTask, onAddTask, onManualSort }) => {
   const monthName = getMonthDisplayName(monthKey);
 
   return (
@@ -20,6 +20,7 @@ const MonthSection = ({ monthKey, tasks, onEditTask, onAddTask }) => {
         <TaskTable
           tasks={tasks}
           onEditTask={onEditTask}
+          onManualSort={onManualSort}
         />
       </div>
 

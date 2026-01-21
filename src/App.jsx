@@ -10,17 +10,20 @@ import TodoList from './pages/TodoList';
 import Login from './pages/Login';
 import ToastContainer from './components/common/Toast';
 import CSVImport from './components/export/CSVImport';
+import PDFExportModal from './components/export/PDFExportModal';
 import { useTasks } from './context/TaskContext';
 import { useToast } from './context/ToastContext';
 import { useAuth } from './context/AuthContext';
 import { exportTasksToCSV, downloadCSV } from './utils/csvUtils';
-import { exportPDFFlat, exportPDFGrouped, exportPDFByCompany, exportPDFByCategory } from './utils/pdfUtils';
+import { exportPDFFlat, exportPDFGrouped, exportPDFByCompany, exportPDFByCategory, exportPDFCalendar } from './utils/pdfUtils';
 import { useCompanies } from './context/CompanyContext';
 import { useCategories } from './context/CategoryContext';
 
 function App() {
   const [currentView, setCurrentView] = useState('grouped');
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showPDFExportModal, setShowPDFExportModal] = useState(false);
+  const [pdfExportType, setPdfExportType] = useState(null);
   const { tasks, monthlyNotes, generalNotes, companyNotes, categoryNotes } = useTasks();
   const { addToast } = useToast();
   const { user, loading: authLoading } = useAuth();
@@ -44,23 +47,32 @@ function App() {
   };
 
   const handleExportPDF = (type) => {
+    setPdfExportType(type);
+    setShowPDFExportModal(true);
+  };
+
+  const handlePDFExportWithOrientation = (type, orientation) => {
     try {
       const savedSettings = localStorage.getItem('mission-control-settings');
       const settings = savedSettings ? JSON.parse(savedSettings) : {};
       const dateMode = settings.groupedDateMode || 'draft';
+      const sortMode = settings.sortMode || 'date';
 
       if (type === 'flat') {
-        exportPDFFlat(tasks, generalNotes['flat-view'] || '');
+        exportPDFFlat(tasks, generalNotes['flat-view'] || '', orientation, sortMode);
         addToast('PDF (Flat) exported successfully', { type: 'success', duration: 3000 });
       } else if (type === 'grouped') {
-        exportPDFGrouped(tasks, monthlyNotes, dateMode);
+        exportPDFGrouped(tasks, monthlyNotes, dateMode, orientation, sortMode);
         addToast('PDF (Grouped) exported successfully', { type: 'success', duration: 3000 });
       } else if (type === 'company') {
-        exportPDFByCompany(tasks, companies, companyNotes);
+        exportPDFByCompany(tasks, companies, companyNotes, orientation);
         addToast('PDF (By Company) exported successfully', { type: 'success', duration: 3000 });
       } else if (type === 'category') {
-        exportPDFByCategory(tasks, categories, categoryNotes);
+        exportPDFByCategory(tasks, categories, categoryNotes, orientation);
         addToast('PDF (By Category) exported successfully', { type: 'success', duration: 3000 });
+      } else if (type === 'calendar') {
+        exportPDFCalendar(tasks, 'all', orientation);
+        addToast('PDF (Calendar) exported successfully', { type: 'success', duration: 3000 });
       }
     } catch (error) {
       console.error('PDF export error:', error);
@@ -132,6 +144,12 @@ function App() {
       <CSVImport
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
+      />
+      <PDFExportModal
+        isOpen={showPDFExportModal}
+        onClose={() => setShowPDFExportModal(false)}
+        onExport={handlePDFExportWithOrientation}
+        exportType={pdfExportType}
       />
     </>
   );

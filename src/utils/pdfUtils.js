@@ -1,35 +1,16 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, isSameDay } from 'date-fns';
-import { formatDate, getMonthDisplayName, groupTasksByMonth, getMonthKey } from './dateUtils';
+import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, isSameDay } from 'date-fns';
+import { getMonthDisplayName, groupTasksByMonth, getMonthKey } from './dateUtils';
+import { multiSort, SORT_ASC } from './sortUtils';
 
-// Colors for PDF - matching dashboard theme
+// Colors for PDF
 const colors = {
-  header: '#64748b',      // Lighter slate for headers
-  secondary: '#38BDF8',   // Blue for future dates
-  success: '#10B981',     // Green for complete
-  warning: '#FBBF24',     // Yellow for due soon
-  danger: '#F43F5E',      // Red for overdue
-  text: '#1e293b',        // Dark slate for text
-  textSecondary: '#64748b', // Muted text
-  textLight: '#FFFFFF',   // White text
-  border: '#e2e8f0',      // Light border
-  surface: '#f8fafc',     // Light surface
-  rowBorder: '#e2e8f0',   // Row borders
-};
-
-// Add page numbers to all pages
-const addPageNumbers = (doc) => {
-  const totalPages = doc.internal.getNumberOfPages();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    doc.setFontSize(8);
-    doc.setTextColor(hexToRgb(colors.textSecondary).r, hexToRgb(colors.textSecondary).g, hexToRgb(colors.textSecondary).b);
-    doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
-  }
+  headerBg: '#9ca3af',     // Gray for table headers
+  text: '#1f2937',         // Dark text
+  textLight: '#ffffff',    // White text
+  border: '#d1d5db',       // Light gray border
+  danger: '#dc2626',       // Red for overdue
 };
 
 // Helper to convert hex to RGB
@@ -42,391 +23,343 @@ const hexToRgb = (hex) => {
   } : { r: 0, g: 0, b: 0 };
 };
 
-// Draw rounded rectangle
-const drawRoundedRect = (doc, x, y, width, height, radius, fillColor, strokeColor) => {
-  const rgb = hexToRgb(fillColor);
-  doc.setFillColor(rgb.r, rgb.g, rgb.b);
-
-  if (strokeColor) {
-    const strokeRgb = hexToRgb(strokeColor);
-    doc.setDrawColor(strokeRgb.r, strokeRgb.g, strokeRgb.b);
-  }
-
-  doc.roundedRect(x, y, width, height, radius, radius, fillColor ? 'F' : 'S');
+// Format date as "7 Jan" style
+const formatShortDate = (dateStr) => {
+  if (!dateStr) return '';
+  const date = typeof dateStr === 'string' ? parseISO(dateStr) : dateStr;
+  return format(date, 'd MMM');
 };
 
-// Draw a pill/badge with text
-const drawPill = (doc, x, y, text, bgColor, textColor = '#FFFFFF') => {
-  const textWidth = doc.getTextWidth(text);
-  const pillWidth = textWidth + 6;
-  const pillHeight = 5;
-  const radius = 2;
-
-  const bgRgb = hexToRgb(bgColor);
-  doc.setFillColor(bgRgb.r, bgRgb.g, bgRgb.b);
-  doc.roundedRect(x, y - 3.5, pillWidth, pillHeight, radius, radius, 'F');
-
-  const textRgb = hexToRgb(textColor);
-  doc.setTextColor(textRgb.r, textRgb.g, textRgb.b);
-  doc.text(text, x + 3, y);
-
-  return pillWidth;
-};
-
-// Get badge color based on status
-const getBadgeColor = (date, isComplete) => {
-  if (isComplete) return colors.success;
-  if (!date) return colors.textSecondary;
-
+// Get date status: 'overdue', 'soon', or 'normal'
+const getDateStatus = (dateStr) => {
+  if (!dateStr) return 'normal';
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const dueDate = new Date(date);
-  dueDate.setHours(0, 0, 0, 0);
+  const date = typeof dateStr === 'string' ? parseISO(dateStr) : new Date(dateStr);
+  date.setHours(0, 0, 0, 0);
 
-  const diffDays = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+  const diffDays = Math.ceil((date - today) / (1000 * 60 * 60 * 24));
 
-  if (diffDays < 0) return colors.danger;
-  if (diffDays <= 3) return colors.warning;
-  return colors.secondary;
+  if (diffDays < 0) return 'overdue';  // Before today = red
+  if (diffDays <= 3) return 'soon';     // Today or within 3 days = yellow
+  return 'normal';                       // More than 3 days = normal
+};
+
+// Get text color based on date status
+const getDateColor = (dateStr) => {
+  const status = getDateStatus(dateStr);
+  if (status === 'overdue') return [220, 38, 38];   // Red
+  if (status === 'soon') return [202, 138, 4];      // Yellow/amber
+  return [31, 41, 55];                               // Normal dark text
+};
+
+// Add header and page numbers to all pages
+const addHeaderAndPageNumbers = (doc) => {
+  const totalPages = doc.internal.getNumberOfPages();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 20;
+  const generatedDate = format(new Date(), 'M/d/yyyy');
+
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
+
+    // Header - generated date left aligned on all pages
+    doc.text(`Generated Date: ${generatedDate}`, margin, 15);
+
+    // Page number - bottom right
+    doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 15, { align: 'right' });
+  }
+};
+
+// Get table configuration based on orientation
+const getTableConfig = (tableWidth, orientation, tasks) => {
+  const isLandscape = orientation === 'landscape';
+
+  if (isLandscape) {
+    // Landscape: Task, Notes, Draft Date, Final Date
+    const taskColWidth = tableWidth * 0.25;
+    const notesColWidth = tableWidth * 0.50;
+    const dateColWidth = tableWidth * 0.125;
+
+    return {
+      head: [['Task', 'Notes', 'Draft Date', 'Final Date']],
+      body: tasks.map((task) => [
+        task.taskName || '',
+        task.notes || '',
+        formatShortDate(task.draftDue),
+        formatShortDate(task.finalDue),
+      ]),
+      columnStyles: {
+        0: { cellWidth: taskColWidth },
+        1: { cellWidth: notesColWidth },
+        2: { cellWidth: dateColWidth, halign: 'right' },
+        3: { cellWidth: dateColWidth, halign: 'right' },
+      },
+      draftDateCol: 2,
+      finalDateCol: 3,
+    };
+  } else {
+    // Portrait: Task, Draft Date, Final Date (no Notes)
+    const taskColWidth = tableWidth * 0.60;
+    const dateColWidth = tableWidth * 0.20;
+
+    return {
+      head: [['Task', 'Draft Date', 'Final Date']],
+      body: tasks.map((task) => [
+        task.taskName || '',
+        formatShortDate(task.draftDue),
+        formatShortDate(task.finalDue),
+      ]),
+      columnStyles: {
+        0: { cellWidth: taskColWidth },
+        1: { cellWidth: dateColWidth, halign: 'right' },
+        2: { cellWidth: dateColWidth, halign: 'right' },
+      },
+      draftDateCol: 1,
+      finalDateCol: 2,
+    };
+  }
 };
 
 // Export PDF - Flat View
-export const exportPDFFlat = (tasks, notes = '', filename = 'tasks-flat.pdf') => {
-  const doc = new jsPDF();
+export const exportPDFFlat = (tasks, notes = '', orientation = 'landscape', sortMode = 'date', filename = 'tasks-flat.pdf') => {
+  const doc = new jsPDF(orientation);
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 14;
-  const contentWidth = pageWidth - (margin * 2);
-  const tableWidth = contentWidth - 2; // Account for inner margins
+  const margin = 20;
+  const tableWidth = pageWidth - (margin * 2);
 
-  // Title
-  doc.setFontSize(18);
-  doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
-  doc.text('Marketing Task List', pageWidth / 2, 20, { align: 'center' });
+  // Filter out completed tasks
+  const activeTasks = tasks.filter((task) => !task.completedAt);
 
-  // Subtitle with date
-  doc.setFontSize(10);
-  doc.setTextColor(hexToRgb(colors.textSecondary).r, hexToRgb(colors.textSecondary).g, hexToRgb(colors.textSecondary).b);
-  doc.text(`Generated: ${format(new Date(), 'MMMM d, yyyy')}`, pageWidth / 2, 28, { align: 'center' });
+  // Separate dated and unscheduled tasks
+  let dated = activeTasks.filter((t) => t.draftDue || t.finalDue);
+  let unscheduled = activeTasks.filter((t) => !t.draftDue && !t.finalDue);
 
-  // Sort tasks: dated first by draft due, then unscheduled
-  const sortedTasks = [...tasks].sort((a, b) => {
-    if (!a.draftDue && !b.draftDue) return 0;
-    if (!a.draftDue) return 1;
-    if (!b.draftDue) return -1;
-    return new Date(a.draftDue) - new Date(b.draftDue);
-  });
+  // Sort based on sortMode (matching FlatView.jsx logic exactly)
+  if (sortMode === 'manual') {
+    // Manual mode: sort by month first, then by sortOrder within each month
+    dated.sort((a, b) => {
+      const monthA = getMonthKey(a.draftDue) || '';
+      const monthB = getMonthKey(b.draftDue) || '';
+      if (monthA !== monthB) {
+        return monthA.localeCompare(monthB);
+      }
+      // Within same month, use sortOrder (then createdAt for stability)
+      const orderDiff = (a.sortOrder || 0) - (b.sortOrder || 0);
+      if (orderDiff !== 0) return orderDiff;
+      // Secondary sort by createdAt for tasks with same/no sortOrder
+      return (a.createdAt || '').localeCompare(b.createdAt || '');
+    });
+    // Unscheduled tasks also sort by sortOrder
+    unscheduled.sort((a, b) => {
+      const orderDiff = (a.sortOrder || 0) - (b.sortOrder || 0);
+      if (orderDiff !== 0) return orderDiff;
+      return (a.createdAt || '').localeCompare(b.createdAt || '');
+    });
+  } else {
+    // Date mode: sort by draft due date
+    dated = multiSort(dated, [{ field: 'draftDue', direction: SORT_ASC }]);
+  }
 
-  // Draw section box with rounded corners
-  let yPos = 35;
-  const headerHeight = 12;
+  const sortedTasks = [...dated, ...unscheduled];
 
-  // Section header with rounded top corners
-  const headerRgb = hexToRgb(colors.header);
-  doc.setFillColor(headerRgb.r, headerRgb.g, headerRgb.b);
-  doc.roundedRect(margin, yPos, contentWidth, headerHeight, 3, 3, 'F');
-  doc.rect(margin, yPos + 6, contentWidth, headerHeight - 6, 'F');
+  let yPos = 25;
 
-  // Header text
-  doc.setFontSize(11);
-  doc.setTextColor(255, 255, 255);
+  // Section title
+  doc.setFontSize(14);
   doc.setFont(undefined, 'bold');
-  doc.text('All Tasks', pageWidth / 2, yPos + 8, { align: 'center' });
-  doc.setFont(undefined, 'normal');
+  doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
+  doc.text('All Tasks', pageWidth / 2, yPos, { align: 'center' });
+  yPos += 8;
 
-  yPos += headerHeight + 2;
+  // Get table configuration based on orientation
+  const tableConfig = getTableConfig(tableWidth, orientation, sortedTasks);
 
-  // Calculate column widths to fill table width
-  const dateColWidth = 32;
-  const notesColWidth = tableWidth * 0.35;
-  const taskNameColWidth = tableWidth - notesColWidth - (dateColWidth * 2);
-
-  // Table with custom styling
+  // Table
   doc.autoTable({
     startY: yPos,
-    head: [['Task Name', 'Notes', 'Draft Due', 'Final Due']],
-    body: sortedTasks.map((task) => [
-      task.taskName || 'Untitled',
-      task.notes || '-',
-      task.draftDue ? formatDate(task.draftDue) : '-',
-      task.finalDue ? formatDate(task.finalDue) : '-',
-    ]),
+    head: tableConfig.head,
+    body: tableConfig.body,
     headStyles: {
-      fillColor: [248, 250, 252],
-      textColor: [100, 116, 139],
-      fontSize: 8,
+      fillColor: [156, 163, 175],
+      textColor: [255, 255, 255],
+      fontSize: 10,
       fontStyle: 'bold',
-      lineWidth: 0,
+      cellPadding: 4,
     },
     bodyStyles: {
-      fontSize: 8,
-      textColor: [30, 41, 59],
-      lineWidth: 0.1,
-      lineColor: [226, 232, 240],
+      fontSize: 9,
+      textColor: [31, 41, 55],
+      cellPadding: 4,
+      lineColor: [209, 213, 219],
+      lineWidth: 0.5,
     },
-    alternateRowStyles: {
-      fillColor: [255, 255, 255],
-    },
-    columnStyles: {
-      0: { cellWidth: taskNameColWidth },
-      1: { cellWidth: notesColWidth },
-      2: { cellWidth: dateColWidth, halign: 'center' },
-      3: { cellWidth: dateColWidth, halign: 'center' },
-    },
-    margin: { left: margin + 1, right: margin + 1 },
+    columnStyles: tableConfig.columnStyles,
+    margin: { left: margin, right: margin },
     tableWidth: tableWidth,
-    tableLineWidth: 0,
-    didDrawCell: function (data) {
+    didParseCell: function (data) {
       if (data.section === 'body') {
         const task = sortedTasks[data.row.index];
-        if (data.column.index === 2 && task.draftDue) {
-          const badgeColor = getBadgeColor(task.draftDue, task.draftComplete);
-          const dateText = formatDate(task.draftDue);
-          const textWidth = doc.getTextWidth(dateText);
-          const pillX = data.cell.x + (data.cell.width - textWidth - 6) / 2;
-          const pillY = data.cell.y + data.cell.height / 2 + 1;
-          doc.setFillColor(255, 255, 255);
-          doc.rect(data.cell.x + 1, data.cell.y + 1, data.cell.width - 2, data.cell.height - 2, 'F');
-          doc.setFontSize(7);
-          drawPill(doc, pillX, pillY, dateText, badgeColor);
+        if (data.column.index === tableConfig.draftDateCol && task.draftDue) {
+          data.cell.styles.textColor = getDateColor(task.draftDue);
         }
-        if (data.column.index === 3 && task.finalDue) {
-          const badgeColor = getBadgeColor(task.finalDue, task.finalComplete);
-          const dateText = formatDate(task.finalDue);
-          const textWidth = doc.getTextWidth(dateText);
-          const pillX = data.cell.x + (data.cell.width - textWidth - 6) / 2;
-          const pillY = data.cell.y + data.cell.height / 2 + 1;
-          doc.setFillColor(255, 255, 255);
-          doc.rect(data.cell.x + 1, data.cell.y + 1, data.cell.width - 2, data.cell.height - 2, 'F');
-          doc.setFontSize(7);
-          drawPill(doc, pillX, pillY, dateText, badgeColor);
+        if (data.column.index === tableConfig.finalDateCol && task.finalDue) {
+          data.cell.styles.textColor = getDateColor(task.finalDue);
         }
       }
     },
   });
 
-  const tableEndY = doc.lastAutoTable.finalY;
+  yPos = doc.lastAutoTable.finalY + 8;
 
-  // Notes section inside the box
-  const notesStartY = tableEndY + 6;
-  const notesText = notes || '';
-  const splitNotes = notesText ? doc.splitTextToSize(notesText, contentWidth - 8) : [];
-  const notesTextHeight = splitNotes.length * 4;
-  const minNotesHeight = 20; // Minimum height for notes section
-  const notesHeight = Math.max(minNotesHeight, notesTextHeight + 10);
+  // Notes section
+  if (notes) {
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
+    doc.text('Notes:', margin, yPos);
+    yPos += 5;
 
-  // Draw notes background
-  const notesBgRgb = hexToRgb(colors.surface);
-  doc.setFillColor(notesBgRgb.r, notesBgRgb.g, notesBgRgb.b);
-  doc.rect(margin + 1, notesStartY, contentWidth - 2, notesHeight, 'F');
-
-  // Notes label
-  doc.setFontSize(8);
-  doc.setFont(undefined, 'bold');
-  doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
-  doc.text('Notes:', margin + 4, notesStartY + 5);
-  doc.setFont(undefined, 'normal');
-
-  // Notes text (only if there are notes)
-  if (splitNotes.length > 0) {
-    doc.setFontSize(8);
-    doc.setTextColor(hexToRgb(colors.textSecondary).r, hexToRgb(colors.textSecondary).g, hexToRgb(colors.textSecondary).b);
-    doc.text(splitNotes, margin + 4, notesStartY + 10);
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(9);
+    const splitNotes = doc.splitTextToSize(notes, tableWidth);
+    doc.text(splitNotes, margin, yPos);
   }
 
-  // Draw section border around everything (table + notes)
-  const sectionEndY = notesStartY + notesHeight;
-  const borderRgb = hexToRgb(colors.border);
-  doc.setDrawColor(borderRgb.r, borderRgb.g, borderRgb.b);
-  doc.setLineWidth(0.5);
-  doc.roundedRect(margin, 35, contentWidth, sectionEndY - 35 + 2, 3, 3, 'S');
-
-  // Add page numbers
-  addPageNumbers(doc);
-
+  addHeaderAndPageNumbers(doc);
   doc.save(filename);
 };
 
 // Export PDF - Grouped View
-export const exportPDFGrouped = (tasks, monthlyNotes = {}, dateMode = 'draft', filename = 'tasks-grouped.pdf') => {
-  const doc = new jsPDF();
+export const exportPDFGrouped = (tasks, monthlyNotes = {}, dateMode = 'draft', orientation = 'landscape', sortMode = 'date', filename = 'tasks-grouped.pdf') => {
+  const doc = new jsPDF(orientation);
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 14;
-  const contentWidth = pageWidth - (margin * 2);
-  const tableWidth = contentWidth - 2;
-  let yPos = 20;
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 20;
+  const tableWidth = pageWidth - (margin * 2);
 
-  // Title
-  doc.setFontSize(18);
-  doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
-  doc.text('Marketing Task List', pageWidth / 2, yPos, { align: 'center' });
-  yPos += 8;
-
-  // Subtitle
-  doc.setFontSize(10);
-  doc.setTextColor(hexToRgb(colors.textSecondary).r, hexToRgb(colors.textSecondary).g, hexToRgb(colors.textSecondary).b);
-  doc.text(`Generated: ${format(new Date(), 'MMMM d, yyyy')} | Grouped by: ${dateMode === 'draft' ? 'Draft Date' : 'Final Date'}`, pageWidth / 2, yPos, { align: 'center' });
-  yPos += 15;
-
-  // Group tasks by month
+  // Filter out completed tasks, then group by month
+  const activeTasks = tasks.filter((task) => !task.completedAt);
   const dateField = dateMode === 'draft' ? 'draftDue' : 'finalDue';
-  const { groups, sortedKeys } = groupTasksByMonth(tasks, dateField);
+  const { groups, sortedKeys } = groupTasksByMonth(activeTasks, dateField);
 
-  // Calculate column widths to fill table width
-  const dateColWidth = 32;
-  const notesColWidth = tableWidth * 0.35;
-  const taskNameColWidth = tableWidth - notesColWidth - (dateColWidth * 2);
+  let yPos = 25;
+  let isFirstSection = true;
 
   sortedKeys.forEach((monthKey) => {
-    const monthTasks = groups[monthKey];
+    // Sort tasks within each month based on sortMode (matching Dashboard.jsx logic exactly)
+    let monthTasks;
+    if (sortMode === 'manual') {
+      // Manual mode: sort by sortOrder first, then by draftDue, then by createdAt for stability
+      monthTasks = multiSort(groups[monthKey], [
+        { field: 'sortOrder', direction: SORT_ASC },
+        { field: 'draftDue', direction: SORT_ASC },
+        { field: 'createdAt', direction: SORT_ASC },
+      ]);
+    } else {
+      // Date mode: sort by draftDue first, then by sortOrder, then by createdAt
+      monthTasks = multiSort(groups[monthKey], [
+        { field: 'draftDue', direction: SORT_ASC },
+        { field: 'sortOrder', direction: SORT_ASC },
+        { field: 'createdAt', direction: SORT_ASC },
+      ]);
+    }
     const monthName = getMonthDisplayName(monthKey);
-    const headerHeight = 12;
+    const notes = monthlyNotes[monthKey] || '';
 
     // Estimate section height
-    const estimatedHeight = headerHeight + (monthTasks.length * 10) + 30;
+    const estimatedHeight = 20 + (monthTasks.length * 12) + (notes ? 30 : 10);
 
-    // Check if we need a new page
-    if (yPos + estimatedHeight > 270) {
+    // Check if we need a new page (but never on first section to avoid blank first page)
+    if (!isFirstSection && yPos + estimatedHeight > pageHeight - 30) {
       doc.addPage();
-      yPos = 20;
+      yPos = 30; // Start below header on new pages
     }
+    isFirstSection = false;
 
-    const sectionStartY = yPos;
-
-    // Section header with rounded top corners
-    const headerRgb = hexToRgb(colors.header);
-    doc.setFillColor(headerRgb.r, headerRgb.g, headerRgb.b);
-    doc.roundedRect(margin, yPos, contentWidth, headerHeight, 3, 3, 'F');
-    doc.rect(margin, yPos + 6, contentWidth, headerHeight - 6, 'F');
-
-    // Header text
-    doc.setFontSize(11);
-    doc.setTextColor(255, 255, 255);
+    // Month title - centered
+    doc.setFontSize(14);
     doc.setFont(undefined, 'bold');
-    doc.text(monthName, pageWidth / 2, yPos + 8, { align: 'center' });
-    doc.setFont(undefined, 'normal');
+    doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
+    doc.text(monthName, pageWidth / 2, yPos, { align: 'center' });
+    yPos += 8;
 
-    const tableStartY = yPos + headerHeight + 2;
+    // Get table configuration based on orientation
+    const tableConfig = getTableConfig(tableWidth, orientation, monthTasks);
 
-    // Table for this month
+    // Table
     doc.autoTable({
-      startY: tableStartY,
-      head: [['Task Name', 'Notes', 'Draft Due', 'Final Due']],
-      body: monthTasks.map((task) => [
-        task.taskName || 'Untitled',
-        task.notes || '-',
-        task.draftDue ? formatDate(task.draftDue) : '-',
-        task.finalDue ? formatDate(task.finalDue) : '-',
-      ]),
+      startY: yPos,
+      head: tableConfig.head,
+      body: tableConfig.body,
       headStyles: {
-        fillColor: [248, 250, 252],
-        textColor: [100, 116, 139],
-        fontSize: 8,
+        fillColor: [156, 163, 175],
+        textColor: [255, 255, 255],
+        fontSize: 10,
         fontStyle: 'bold',
-        lineWidth: 0,
+        cellPadding: 4,
       },
       bodyStyles: {
-        fontSize: 8,
-        textColor: [30, 41, 59],
-        lineWidth: 0.1,
-        lineColor: [226, 232, 240],
+        fontSize: 9,
+        textColor: [31, 41, 55],
+        cellPadding: 4,
+        lineColor: [209, 213, 219],
+        lineWidth: 0.5,
       },
-      alternateRowStyles: {
-        fillColor: [255, 255, 255],
-      },
-      columnStyles: {
-        0: { cellWidth: taskNameColWidth },
-        1: { cellWidth: notesColWidth },
-        2: { cellWidth: dateColWidth, halign: 'center' },
-        3: { cellWidth: dateColWidth, halign: 'center' },
-      },
-      margin: { left: margin + 1, right: margin + 1 },
+      columnStyles: tableConfig.columnStyles,
+      margin: { left: margin, right: margin },
       tableWidth: tableWidth,
-      tableLineWidth: 0,
-      didDrawCell: function (data) {
+      didParseCell: function (data) {
         if (data.section === 'body') {
           const task = monthTasks[data.row.index];
-          if (data.column.index === 2 && task.draftDue) {
-            const badgeColor = getBadgeColor(task.draftDue, task.draftComplete);
-            const dateText = formatDate(task.draftDue);
-            const textWidth = doc.getTextWidth(dateText);
-            const pillX = data.cell.x + (data.cell.width - textWidth - 6) / 2;
-            const pillY = data.cell.y + data.cell.height / 2 + 1;
-            doc.setFillColor(255, 255, 255);
-            doc.rect(data.cell.x + 1, data.cell.y + 1, data.cell.width - 2, data.cell.height - 2, 'F');
-            doc.setFontSize(7);
-            drawPill(doc, pillX, pillY, dateText, badgeColor);
+          if (data.column.index === tableConfig.draftDateCol && task.draftDue) {
+            data.cell.styles.textColor = getDateColor(task.draftDue);
           }
-          if (data.column.index === 3 && task.finalDue) {
-            const badgeColor = getBadgeColor(task.finalDue, task.finalComplete);
-            const dateText = formatDate(task.finalDue);
-            const textWidth = doc.getTextWidth(dateText);
-            const pillX = data.cell.x + (data.cell.width - textWidth - 6) / 2;
-            const pillY = data.cell.y + data.cell.height / 2 + 1;
-            doc.setFillColor(255, 255, 255);
-            doc.rect(data.cell.x + 1, data.cell.y + 1, data.cell.width - 2, data.cell.height - 2, 'F');
-            doc.setFontSize(7);
-            drawPill(doc, pillX, pillY, dateText, badgeColor);
+          if (data.column.index === tableConfig.finalDateCol && task.finalDue) {
+            data.cell.styles.textColor = getDateColor(task.finalDue);
           }
         }
       },
     });
 
-    const tableEndY = doc.lastAutoTable.finalY;
+    yPos = doc.lastAutoTable.finalY + 6;
 
-    // Notes section inside the box
-    const notesStartY = tableEndY + 6;
-    const notes = monthlyNotes[monthKey];
-    const notesText = notes || '';
-    const splitNotes = notesText ? doc.splitTextToSize(notesText, contentWidth - 8) : [];
-    const notesTextHeight = splitNotes.length * 4;
-    const minNotesHeight = 20; // Minimum height for notes section
-    const notesHeight = Math.max(minNotesHeight, notesTextHeight + 10);
+    // Notes section
+    if (notes) {
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
+      doc.text('Notes:', margin, yPos);
+      yPos += 5;
 
-    // Draw notes background
-    const notesBgRgb = hexToRgb(colors.surface);
-    doc.setFillColor(notesBgRgb.r, notesBgRgb.g, notesBgRgb.b);
-    doc.rect(margin + 1, notesStartY, contentWidth - 2, notesHeight, 'F');
-
-    // Notes label
-    doc.setFontSize(8);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
-    doc.text('Notes:', margin + 4, notesStartY + 5);
-    doc.setFont(undefined, 'normal');
-
-    // Notes text (only if there are notes)
-    if (splitNotes.length > 0) {
-      doc.setFontSize(8);
-      doc.setTextColor(hexToRgb(colors.textSecondary).r, hexToRgb(colors.textSecondary).g, hexToRgb(colors.textSecondary).b);
-      doc.text(splitNotes, margin + 4, notesStartY + 10);
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(9);
+      const splitNotes = doc.splitTextToSize(notes, tableWidth);
+      doc.text(splitNotes, margin, yPos);
+      yPos += splitNotes.length * 4 + 10;
+    } else {
+      yPos += 15;
     }
-
-    // Draw section border around everything (table + notes)
-    const sectionEndY = notesStartY + notesHeight;
-    const borderRgb = hexToRgb(colors.border);
-    doc.setDrawColor(borderRgb.r, borderRgb.g, borderRgb.b);
-    doc.setLineWidth(0.5);
-    doc.roundedRect(margin, sectionStartY, contentWidth, sectionEndY - sectionStartY + 2, 3, 3, 'S');
-
-    yPos = sectionEndY + 10;
   });
 
-  // Add page numbers
-  addPageNumbers(doc);
-
+  addHeaderAndPageNumbers(doc);
   doc.save(filename);
 };
 
 // Export PDF - Calendar View
-export const exportPDFCalendar = (tasks, dateFilter = 'all', filename = 'tasks-calendar.pdf') => {
-  const doc = new jsPDF('landscape');
+export const exportPDFCalendar = (tasks, dateFilter = 'all', orientation = 'landscape', filename = 'tasks-calendar.pdf') => {
+  const doc = new jsPDF(orientation);
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
 
   // Get unique months with non-recurring tasks
   const monthsWithTasks = new Set();
   tasks.forEach((task) => {
-    if (task.isRecurring) return;
+    if (task.isRecurring || task.completedAt) return;
     if (task.draftDue) monthsWithTasks.add(getMonthKey(task.draftDue));
     if (task.finalDue) monthsWithTasks.add(getMonthKey(task.finalDue));
   });
@@ -448,19 +381,19 @@ export const exportPDFCalendar = (tasks, dateFilter = 'all', filename = 'tasks-c
 
     // Month title
     doc.setFontSize(16);
-    doc.setTextColor(colors.text);
-    doc.text(format(currentDate, 'MMMM yyyy'), pageWidth / 2, 15, { align: 'center' });
+    doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
+    doc.text(format(currentDate, 'MMMM yyyy'), pageWidth / 2, 20, { align: 'center' });
 
     // Calendar grid
-    const startX = 15;
-    const startY = 25;
-    const cellWidth = (pageWidth - 30) / 7;
-    const cellHeight = (pageHeight - 40) / 7;
+    const startX = 20;
+    const startY = 30;
+    const cellWidth = (pageWidth - 40) / 7;
+    const cellHeight = (pageHeight - 50) / 7;
 
     // Day headers
     const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     doc.setFontSize(10);
-    doc.setTextColor(colors.textSecondary);
+    doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
     weekDays.forEach((day, i) => {
       doc.text(day, startX + i * cellWidth + cellWidth / 2, startY, { align: 'center' });
     });
@@ -480,32 +413,32 @@ export const exportPDFCalendar = (tasks, dateFilter = 'all', filename = 'tasks-c
       const y = startY + 5 + row * cellHeight;
 
       // Cell border
-      doc.setDrawColor(colors.border);
+      doc.setDrawColor(hexToRgb(colors.border).r, hexToRgb(colors.border).g, hexToRgb(colors.border).b);
       doc.rect(x, y, cellWidth, cellHeight);
 
       // Day number
       const isCurrentMonth = isSameMonth(day, currentDate);
       doc.setFontSize(9);
-      doc.setTextColor(isCurrentMonth ? colors.text : colors.textSecondary);
+      doc.setTextColor(isCurrentMonth ? 31 : 156, isCurrentMonth ? 41 : 163, isCurrentMonth ? 55 : 175);
       doc.text(format(day, 'd'), x + cellWidth - 5, y + 5, { align: 'right' });
 
       // Tasks for this day
-      let taskY = y + 10;
+      let taskY = y + 12;
       tasks.forEach((task) => {
-        if (task.isRecurring) return;
+        if (task.isRecurring || task.completedAt) return;
 
         let showTask = false;
         let taskType = '';
 
         if ((dateFilter === 'all' || dateFilter === 'draft') && task.draftDue) {
-          if (isSameDay(new Date(task.draftDue), day)) {
+          if (isSameDay(parseISO(task.draftDue), day)) {
             showTask = true;
             taskType = 'D: ';
           }
         }
 
         if ((dateFilter === 'all' || dateFilter === 'final') && task.finalDue) {
-          if (isSameDay(new Date(task.finalDue), day)) {
+          if (isSameDay(parseISO(task.finalDue), day)) {
             if (!showTask) {
               showTask = true;
               taskType = 'F: ';
@@ -515,7 +448,7 @@ export const exportPDFCalendar = (tasks, dateFilter = 'all', filename = 'tasks-c
 
         if (showTask && taskY < y + cellHeight - 3) {
           doc.setFontSize(6);
-          doc.setTextColor(taskType.startsWith('D') ? colors.secondary : colors.success);
+          doc.setTextColor(taskType.startsWith('D') ? 59 : 16, taskType.startsWith('D') ? 130 : 185, taskType.startsWith('D') ? 246 : 129);
           const taskText = taskType + (task.taskName || 'Task').substring(0, 15);
           doc.text(taskText, x + 2, taskY);
           taskY += 5;
@@ -534,29 +467,17 @@ export const exportPDFCalendar = (tasks, dateFilter = 'all', filename = 'tasks-c
 };
 
 // Export PDF - By Company View
-export const exportPDFByCompany = (tasks, companies = [], companyNotes = {}, filename = 'tasks-by-company.pdf') => {
-  const doc = new jsPDF();
+export const exportPDFByCompany = (tasks, companies = [], companyNotes = {}, orientation = 'landscape', filename = 'tasks-by-company.pdf') => {
+  const doc = new jsPDF(orientation);
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 14;
-  const contentWidth = pageWidth - (margin * 2);
-  const tableWidth = contentWidth - 2;
-  let yPos = 20;
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 20;
+  const tableWidth = pageWidth - (margin * 2);
 
-  // Title
-  doc.setFontSize(18);
-  doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
-  doc.text('Tasks by Company', pageWidth / 2, yPos, { align: 'center' });
-  yPos += 8;
-
-  // Subtitle
-  doc.setFontSize(10);
-  doc.setTextColor(hexToRgb(colors.textSecondary).r, hexToRgb(colors.textSecondary).g, hexToRgb(colors.textSecondary).b);
-  doc.text(`Generated: ${format(new Date(), 'MMMM d, yyyy')}`, pageWidth / 2, yPos, { align: 'center' });
-  yPos += 15;
-
-  // Group tasks by company
+  // Filter out completed tasks, then group by company
+  const activeTasks = tasks.filter((task) => !task.completedAt);
   const grouped = {};
-  tasks.forEach((task) => {
+  activeTasks.forEach((task) => {
     const key = task.companyId || 'unassigned';
     if (!grouped[key]) {
       grouped[key] = [];
@@ -564,193 +485,118 @@ export const exportPDFByCompany = (tasks, companies = [], companyNotes = {}, fil
     grouped[key].push(task);
   });
 
-  // Sort company keys alphabetically by company name
+  // Sort company keys
   const companyKeys = Object.keys(grouped).filter(k => k !== 'unassigned');
   companyKeys.sort((a, b) => {
     const companyA = companies.find(c => c.id === a);
     const companyB = companies.find(c => c.id === b);
-    const nameA = companyA?.name || '';
-    const nameB = companyB?.name || '';
-    return nameA.localeCompare(nameB);
+    return (companyA?.name || '').localeCompare(companyB?.name || '');
   });
 
-  // Add unassigned at the end if it exists
   const sortedKeys = [...companyKeys];
   if (grouped['unassigned']) {
     sortedKeys.push('unassigned');
   }
 
-  // Calculate column widths to fill table width
-  const dateColWidth = 32;
-  const notesColWidth = tableWidth * 0.35;
-  const taskNameColWidth = tableWidth - notesColWidth - (dateColWidth * 2);
+  let yPos = 25;
+  let isFirstSection = true;
 
   sortedKeys.forEach((companyId) => {
     const companyTasks = grouped[companyId];
     const company = companies.find(c => c.id === companyId);
     const companyName = companyId === 'unassigned' ? 'Unassigned' : (company?.name || 'Unknown Company');
-    const headerHeight = 12;
+    const notes = companyNotes[companyId] || '';
 
-    // Estimate section height
-    const estimatedHeight = headerHeight + (companyTasks.length * 10) + 30;
+    const estimatedHeight = 20 + (companyTasks.length * 12) + (notes ? 30 : 10);
 
-    // Check if we need a new page
-    if (yPos + estimatedHeight > 270) {
+    // Check if we need a new page (but never on first section to avoid blank first page)
+    if (!isFirstSection && yPos + estimatedHeight > pageHeight - 30) {
       doc.addPage();
-      yPos = 20;
+      yPos = 30; // Start below header on new pages
     }
+    isFirstSection = false;
 
-    const sectionStartY = yPos;
-
-    // Section header with rounded top corners
-    const headerRgb = hexToRgb(colors.header);
-    doc.setFillColor(headerRgb.r, headerRgb.g, headerRgb.b);
-    doc.roundedRect(margin, yPos, contentWidth, headerHeight, 3, 3, 'F');
-    doc.rect(margin, yPos + 6, contentWidth, headerHeight - 6, 'F');
-
-    // Header text
-    doc.setFontSize(11);
-    doc.setTextColor(255, 255, 255);
+    // Company title
+    doc.setFontSize(14);
     doc.setFont(undefined, 'bold');
-    doc.text(companyName, pageWidth / 2, yPos + 8, { align: 'center' });
-    doc.setFont(undefined, 'normal');
+    doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
+    doc.text(companyName, pageWidth / 2, yPos, { align: 'center' });
+    yPos += 8;
 
-    const tableStartY = yPos + headerHeight + 2;
+    // Get table configuration based on orientation
+    const tableConfig = getTableConfig(tableWidth, orientation, companyTasks);
 
-    // Table for this company
+    // Table
     doc.autoTable({
-      startY: tableStartY,
-      head: [['Task Name', 'Notes', 'Draft Due', 'Final Due']],
-      body: companyTasks.map((task) => [
-        task.taskName || 'Untitled',
-        task.notes || '-',
-        task.draftDue ? formatDate(task.draftDue) : '-',
-        task.finalDue ? formatDate(task.finalDue) : '-',
-      ]),
+      startY: yPos,
+      head: tableConfig.head,
+      body: tableConfig.body,
       headStyles: {
-        fillColor: [248, 250, 252],
-        textColor: [100, 116, 139],
-        fontSize: 8,
+        fillColor: [156, 163, 175],
+        textColor: [255, 255, 255],
+        fontSize: 10,
         fontStyle: 'bold',
-        lineWidth: 0,
+        cellPadding: 4,
       },
       bodyStyles: {
-        fontSize: 8,
-        textColor: [30, 41, 59],
-        lineWidth: 0.1,
-        lineColor: [226, 232, 240],
+        fontSize: 9,
+        textColor: [31, 41, 55],
+        cellPadding: 4,
+        lineColor: [209, 213, 219],
+        lineWidth: 0.5,
       },
-      alternateRowStyles: {
-        fillColor: [255, 255, 255],
-      },
-      columnStyles: {
-        0: { cellWidth: taskNameColWidth },
-        1: { cellWidth: notesColWidth },
-        2: { cellWidth: dateColWidth, halign: 'center' },
-        3: { cellWidth: dateColWidth, halign: 'center' },
-      },
-      margin: { left: margin + 1, right: margin + 1 },
+      columnStyles: tableConfig.columnStyles,
+      margin: { left: margin, right: margin },
       tableWidth: tableWidth,
-      tableLineWidth: 0,
-      didDrawCell: function (data) {
+      didParseCell: function (data) {
         if (data.section === 'body') {
           const task = companyTasks[data.row.index];
-          if (data.column.index === 2 && task.draftDue) {
-            const badgeColor = getBadgeColor(task.draftDue, task.draftComplete);
-            const dateText = formatDate(task.draftDue);
-            const textWidth = doc.getTextWidth(dateText);
-            const pillX = data.cell.x + (data.cell.width - textWidth - 6) / 2;
-            const pillY = data.cell.y + data.cell.height / 2 + 1;
-            doc.setFillColor(255, 255, 255);
-            doc.rect(data.cell.x + 1, data.cell.y + 1, data.cell.width - 2, data.cell.height - 2, 'F');
-            doc.setFontSize(7);
-            drawPill(doc, pillX, pillY, dateText, badgeColor);
+          if (data.column.index === tableConfig.draftDateCol && task.draftDue) {
+            data.cell.styles.textColor = getDateColor(task.draftDue);
           }
-          if (data.column.index === 3 && task.finalDue) {
-            const badgeColor = getBadgeColor(task.finalDue, task.finalComplete);
-            const dateText = formatDate(task.finalDue);
-            const textWidth = doc.getTextWidth(dateText);
-            const pillX = data.cell.x + (data.cell.width - textWidth - 6) / 2;
-            const pillY = data.cell.y + data.cell.height / 2 + 1;
-            doc.setFillColor(255, 255, 255);
-            doc.rect(data.cell.x + 1, data.cell.y + 1, data.cell.width - 2, data.cell.height - 2, 'F');
-            doc.setFontSize(7);
-            drawPill(doc, pillX, pillY, dateText, badgeColor);
+          if (data.column.index === tableConfig.finalDateCol && task.finalDue) {
+            data.cell.styles.textColor = getDateColor(task.finalDue);
           }
         }
       },
     });
 
-    const tableEndY = doc.lastAutoTable.finalY;
+    yPos = doc.lastAutoTable.finalY + 6;
 
-    // Notes section inside the box
-    const notesStartY = tableEndY + 6;
-    const notes = companyNotes[companyId];
-    const notesText = notes || '';
-    const splitNotes = notesText ? doc.splitTextToSize(notesText, contentWidth - 8) : [];
-    const notesTextHeight = splitNotes.length * 4;
-    const minNotesHeight = 20; // Minimum height for notes section
-    const notesHeight = Math.max(minNotesHeight, notesTextHeight + 10);
+    // Notes section
+    if (notes) {
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
+      doc.text('Notes:', margin, yPos);
+      yPos += 5;
 
-    // Draw notes background
-    const notesBgRgb = hexToRgb(colors.surface);
-    doc.setFillColor(notesBgRgb.r, notesBgRgb.g, notesBgRgb.b);
-    doc.rect(margin + 1, notesStartY, contentWidth - 2, notesHeight, 'F');
-
-    // Notes label
-    doc.setFontSize(8);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
-    doc.text('Notes:', margin + 4, notesStartY + 5);
-    doc.setFont(undefined, 'normal');
-
-    // Notes text (only if there are notes)
-    if (splitNotes.length > 0) {
-      doc.setFontSize(8);
-      doc.setTextColor(hexToRgb(colors.textSecondary).r, hexToRgb(colors.textSecondary).g, hexToRgb(colors.textSecondary).b);
-      doc.text(splitNotes, margin + 4, notesStartY + 10);
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(9);
+      const splitNotes = doc.splitTextToSize(notes, tableWidth);
+      doc.text(splitNotes, margin, yPos);
+      yPos += splitNotes.length * 4 + 10;
+    } else {
+      yPos += 15;
     }
-
-    // Draw section border around everything (table + notes)
-    const sectionEndY = notesStartY + notesHeight;
-    const borderRgb = hexToRgb(colors.border);
-    doc.setDrawColor(borderRgb.r, borderRgb.g, borderRgb.b);
-    doc.setLineWidth(0.5);
-    doc.roundedRect(margin, sectionStartY, contentWidth, sectionEndY - sectionStartY + 2, 3, 3, 'S');
-
-    yPos = sectionEndY + 10;
   });
 
-  // Add page numbers
-  addPageNumbers(doc);
-
+  addHeaderAndPageNumbers(doc);
   doc.save(filename);
 };
 
 // Export PDF - By Category View
-export const exportPDFByCategory = (tasks, categories = [], categoryNotes = {}, filename = 'tasks-by-category.pdf') => {
-  const doc = new jsPDF();
+export const exportPDFByCategory = (tasks, categories = [], categoryNotes = {}, orientation = 'landscape', filename = 'tasks-by-category.pdf') => {
+  const doc = new jsPDF(orientation);
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 14;
-  const contentWidth = pageWidth - (margin * 2);
-  const tableWidth = contentWidth - 2;
-  let yPos = 20;
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 20;
+  const tableWidth = pageWidth - (margin * 2);
 
-  // Title
-  doc.setFontSize(18);
-  doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
-  doc.text('Tasks by Category', pageWidth / 2, yPos, { align: 'center' });
-  yPos += 8;
-
-  // Subtitle
-  doc.setFontSize(10);
-  doc.setTextColor(hexToRgb(colors.textSecondary).r, hexToRgb(colors.textSecondary).g, hexToRgb(colors.textSecondary).b);
-  doc.text(`Generated: ${format(new Date(), 'MMMM d, yyyy')}`, pageWidth / 2, yPos, { align: 'center' });
-  yPos += 15;
-
-  // Group tasks by category
+  // Filter out completed tasks, then group by category
+  const activeTasks = tasks.filter((task) => !task.completedAt);
   const grouped = {};
-  tasks.forEach((task) => {
+  activeTasks.forEach((task) => {
     const key = task.categoryId || 'unassigned';
     if (!grouped[key]) {
       grouped[key] = [];
@@ -758,165 +604,102 @@ export const exportPDFByCategory = (tasks, categories = [], categoryNotes = {}, 
     grouped[key].push(task);
   });
 
-  // Sort category keys alphabetically by category name
+  // Sort category keys
   const categoryKeys = Object.keys(grouped).filter(k => k !== 'unassigned');
   categoryKeys.sort((a, b) => {
     const categoryA = categories.find(c => c.id === a);
     const categoryB = categories.find(c => c.id === b);
-    const nameA = categoryA?.name || '';
-    const nameB = categoryB?.name || '';
-    return nameA.localeCompare(nameB);
+    return (categoryA?.name || '').localeCompare(categoryB?.name || '');
   });
 
-  // Add unassigned at the end if it exists
   const sortedKeys = [...categoryKeys];
   if (grouped['unassigned']) {
     sortedKeys.push('unassigned');
   }
 
-  // Calculate column widths to fill table width
-  const dateColWidth = 32;
-  const notesColWidth = tableWidth * 0.35;
-  const taskNameColWidth = tableWidth - notesColWidth - (dateColWidth * 2);
+  let yPos = 25;
+  let isFirstSection = true;
 
   sortedKeys.forEach((categoryId) => {
     const categoryTasks = grouped[categoryId];
     const category = categories.find(c => c.id === categoryId);
     const categoryName = categoryId === 'unassigned' ? 'Unassigned' : (category?.name || 'Unknown Category');
-    const headerHeight = 12;
+    const notes = categoryNotes[categoryId] || '';
 
-    // Estimate section height
-    const estimatedHeight = headerHeight + (categoryTasks.length * 10) + 30;
+    const estimatedHeight = 20 + (categoryTasks.length * 12) + (notes ? 30 : 10);
 
-    // Check if we need a new page
-    if (yPos + estimatedHeight > 270) {
+    // Check if we need a new page (but never on first section to avoid blank first page)
+    if (!isFirstSection && yPos + estimatedHeight > pageHeight - 30) {
       doc.addPage();
-      yPos = 20;
+      yPos = 30; // Start below header on new pages
     }
+    isFirstSection = false;
 
-    const sectionStartY = yPos;
-
-    // Section header with rounded top corners
-    const headerRgb = hexToRgb(colors.header);
-    doc.setFillColor(headerRgb.r, headerRgb.g, headerRgb.b);
-    doc.roundedRect(margin, yPos, contentWidth, headerHeight, 3, 3, 'F');
-    doc.rect(margin, yPos + 6, contentWidth, headerHeight - 6, 'F');
-
-    // Header text
-    doc.setFontSize(11);
-    doc.setTextColor(255, 255, 255);
+    // Category title
+    doc.setFontSize(14);
     doc.setFont(undefined, 'bold');
-    doc.text(categoryName, pageWidth / 2, yPos + 8, { align: 'center' });
-    doc.setFont(undefined, 'normal');
+    doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
+    doc.text(categoryName, pageWidth / 2, yPos, { align: 'center' });
+    yPos += 8;
 
-    const tableStartY = yPos + headerHeight + 2;
+    // Get table configuration based on orientation
+    const tableConfig = getTableConfig(tableWidth, orientation, categoryTasks);
 
-    // Table for this category
+    // Table
     doc.autoTable({
-      startY: tableStartY,
-      head: [['Task Name', 'Notes', 'Draft Due', 'Final Due']],
-      body: categoryTasks.map((task) => [
-        task.taskName || 'Untitled',
-        task.notes || '-',
-        task.draftDue ? formatDate(task.draftDue) : '-',
-        task.finalDue ? formatDate(task.finalDue) : '-',
-      ]),
+      startY: yPos,
+      head: tableConfig.head,
+      body: tableConfig.body,
       headStyles: {
-        fillColor: [248, 250, 252],
-        textColor: [100, 116, 139],
-        fontSize: 8,
+        fillColor: [156, 163, 175],
+        textColor: [255, 255, 255],
+        fontSize: 10,
         fontStyle: 'bold',
-        lineWidth: 0,
+        cellPadding: 4,
       },
       bodyStyles: {
-        fontSize: 8,
-        textColor: [30, 41, 59],
-        lineWidth: 0.1,
-        lineColor: [226, 232, 240],
+        fontSize: 9,
+        textColor: [31, 41, 55],
+        cellPadding: 4,
+        lineColor: [209, 213, 219],
+        lineWidth: 0.5,
       },
-      alternateRowStyles: {
-        fillColor: [255, 255, 255],
-      },
-      columnStyles: {
-        0: { cellWidth: taskNameColWidth },
-        1: { cellWidth: notesColWidth },
-        2: { cellWidth: dateColWidth, halign: 'center' },
-        3: { cellWidth: dateColWidth, halign: 'center' },
-      },
-      margin: { left: margin + 1, right: margin + 1 },
+      columnStyles: tableConfig.columnStyles,
+      margin: { left: margin, right: margin },
       tableWidth: tableWidth,
-      tableLineWidth: 0,
-      didDrawCell: function (data) {
+      didParseCell: function (data) {
         if (data.section === 'body') {
           const task = categoryTasks[data.row.index];
-          if (data.column.index === 2 && task.draftDue) {
-            const badgeColor = getBadgeColor(task.draftDue, task.draftComplete);
-            const dateText = formatDate(task.draftDue);
-            const textWidth = doc.getTextWidth(dateText);
-            const pillX = data.cell.x + (data.cell.width - textWidth - 6) / 2;
-            const pillY = data.cell.y + data.cell.height / 2 + 1;
-            doc.setFillColor(255, 255, 255);
-            doc.rect(data.cell.x + 1, data.cell.y + 1, data.cell.width - 2, data.cell.height - 2, 'F');
-            doc.setFontSize(7);
-            drawPill(doc, pillX, pillY, dateText, badgeColor);
+          if (data.column.index === tableConfig.draftDateCol && task.draftDue) {
+            data.cell.styles.textColor = getDateColor(task.draftDue);
           }
-          if (data.column.index === 3 && task.finalDue) {
-            const badgeColor = getBadgeColor(task.finalDue, task.finalComplete);
-            const dateText = formatDate(task.finalDue);
-            const textWidth = doc.getTextWidth(dateText);
-            const pillX = data.cell.x + (data.cell.width - textWidth - 6) / 2;
-            const pillY = data.cell.y + data.cell.height / 2 + 1;
-            doc.setFillColor(255, 255, 255);
-            doc.rect(data.cell.x + 1, data.cell.y + 1, data.cell.width - 2, data.cell.height - 2, 'F');
-            doc.setFontSize(7);
-            drawPill(doc, pillX, pillY, dateText, badgeColor);
+          if (data.column.index === tableConfig.finalDateCol && task.finalDue) {
+            data.cell.styles.textColor = getDateColor(task.finalDue);
           }
         }
       },
     });
 
-    const tableEndY = doc.lastAutoTable.finalY;
+    yPos = doc.lastAutoTable.finalY + 6;
 
-    // Notes section inside the box
-    const notesStartY = tableEndY + 6;
-    const notes = categoryNotes[categoryId];
-    const notesText = notes || '';
-    const splitNotes = notesText ? doc.splitTextToSize(notesText, contentWidth - 8) : [];
-    const notesTextHeight = splitNotes.length * 4;
-    const minNotesHeight = 20; // Minimum height for notes section
-    const notesHeight = Math.max(minNotesHeight, notesTextHeight + 10);
+    // Notes section
+    if (notes) {
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
+      doc.text('Notes:', margin, yPos);
+      yPos += 5;
 
-    // Draw notes background
-    const notesBgRgb = hexToRgb(colors.surface);
-    doc.setFillColor(notesBgRgb.r, notesBgRgb.g, notesBgRgb.b);
-    doc.rect(margin + 1, notesStartY, contentWidth - 2, notesHeight, 'F');
-
-    // Notes label
-    doc.setFontSize(8);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(hexToRgb(colors.text).r, hexToRgb(colors.text).g, hexToRgb(colors.text).b);
-    doc.text('Notes:', margin + 4, notesStartY + 5);
-    doc.setFont(undefined, 'normal');
-
-    // Notes text (only if there are notes)
-    if (splitNotes.length > 0) {
-      doc.setFontSize(8);
-      doc.setTextColor(hexToRgb(colors.textSecondary).r, hexToRgb(colors.textSecondary).g, hexToRgb(colors.textSecondary).b);
-      doc.text(splitNotes, margin + 4, notesStartY + 10);
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(9);
+      const splitNotes = doc.splitTextToSize(notes, tableWidth);
+      doc.text(splitNotes, margin, yPos);
+      yPos += splitNotes.length * 4 + 10;
+    } else {
+      yPos += 15;
     }
-
-    // Draw section border around everything (table + notes)
-    const sectionEndY = notesStartY + notesHeight;
-    const borderRgb = hexToRgb(colors.border);
-    doc.setDrawColor(borderRgb.r, borderRgb.g, borderRgb.b);
-    doc.setLineWidth(0.5);
-    doc.roundedRect(margin, sectionStartY, contentWidth, sectionEndY - sectionStartY + 2, 3, 3, 'S');
-
-    yPos = sectionEndY + 10;
   });
 
-  // Add page numbers
-  addPageNumbers(doc);
-
+  addHeaderAndPageNumbers(doc);
   doc.save(filename);
 };

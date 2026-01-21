@@ -6,6 +6,9 @@ const Header = forwardRef(({
   showDateToggle,
   dateMode,
   onDateModeChange,
+  showSortToggle,
+  sortMode,
+  onSortModeChange,
   showSearch,
   searchValue,
   onSearchChange,
@@ -29,6 +32,18 @@ const Header = forwardRef(({
             >
               <option value="draft">Draft</option>
               <option value="final">Final</option>
+            </select>
+          )}
+
+          {/* Sort Mode Toggle */}
+          {showSortToggle && (
+            <select
+              value={sortMode}
+              onChange={(e) => onSortModeChange(e.target.value)}
+              className="bg-surface-hover border border-border rounded-lg px-2 md:px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="date">Sort by Date</option>
+              <option value="manual">Manual Order</option>
             </select>
           )}
 

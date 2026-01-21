@@ -282,6 +282,7 @@ export const TaskProvider = ({ children }) => {
       recurringParentId: null,
       repeat: 'none',
       sortOrder: tasks.length + 1,
+      manuallyOrdered: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -344,7 +345,7 @@ export const TaskProvider = ({ children }) => {
     const tasksToUpdate = tasks.filter((task) => taskIds.includes(task.id));
     const updatedTasks = tasksToUpdate.map((task) => {
       const newIndex = taskIds.indexOf(task.id);
-      return { ...task, sortOrder: newIndex + 1 };
+      return { ...task, sortOrder: newIndex + 1, manuallyOrdered: true };
     });
 
     await saveTasks(user.uid, updatedTasks);

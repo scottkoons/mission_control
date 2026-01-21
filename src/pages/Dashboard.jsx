@@ -9,12 +9,13 @@ import TaskModal from '../components/tasks/TaskModal';
 import { useTasks } from '../context/TaskContext';
 import { storageService } from '../services/storageService';
 import { groupTasksByMonth } from '../utils/dateUtils';
-import { defaultTaskSort } from '../utils/sortUtils';
+import { multiSort, SORT_ASC } from '../utils/sortUtils';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 
 const Dashboard = ({ currentView, onViewChange }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [dateMode, setDateMode] = useState('draft');
+  const [sortMode, setSortMode] = useState('date'); // 'date' or 'manual'
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [defaultMonth, setDefaultMonth] = useState(null);
@@ -25,6 +26,7 @@ const Dashboard = ({ currentView, onViewChange }) => {
   useEffect(() => {
     const settings = storageService.getSettings();
     setDateMode(settings.groupedDateMode || 'draft');
+    setSortMode(settings.sortMode || 'date');
   }, []);
 
   // Keyboard shortcuts
@@ -41,6 +43,11 @@ const Dashboard = ({ currentView, onViewChange }) => {
   const handleDateModeChange = (mode) => {
     setDateMode(mode);
     storageService.saveSettings({ groupedDateMode: mode });
+  };
+
+  const handleSortModeChange = (mode) => {
+    setSortMode(mode);
+    storageService.saveSettings({ sortMode: mode });
   };
 
   const getTitle = () => {
@@ -80,14 +87,28 @@ const Dashboard = ({ currentView, onViewChange }) => {
     return groupTasksByMonth(filteredTasks, dateField);
   }, [filteredTasks, dateMode]);
 
-  // Sort tasks within each group
+  // Sort tasks within each group based on sortMode
   const sortedGroups = useMemo(() => {
     const result = {};
     for (const key of monthKeys) {
-      result[key] = defaultTaskSort(taskGroups[key]);
+      if (sortMode === 'manual') {
+        // Manual mode: sort by sortOrder first, then by date, then by createdAt for stability
+        result[key] = multiSort(taskGroups[key], [
+          { field: 'sortOrder', direction: SORT_ASC },
+          { field: 'draftDue', direction: SORT_ASC },
+          { field: 'createdAt', direction: SORT_ASC },
+        ]);
+      } else {
+        // Date mode: sort by draft due date, then by sortOrder, then by createdAt
+        result[key] = multiSort(taskGroups[key], [
+          { field: 'draftDue', direction: SORT_ASC },
+          { field: 'sortOrder', direction: SORT_ASC },
+          { field: 'createdAt', direction: SORT_ASC },
+        ]);
+      }
     }
     return result;
-  }, [taskGroups, monthKeys]);
+  }, [taskGroups, monthKeys, sortMode]);
 
   const handleEditTask = (task, focusOnAttachments = false) => {
     setEditingTask(task);
@@ -119,6 +140,9 @@ const Dashboard = ({ currentView, onViewChange }) => {
           showDateToggle={currentView === 'grouped'}
           dateMode={dateMode}
           onDateModeChange={handleDateModeChange}
+          showSortToggle={currentView === 'grouped' || currentView === 'flat'}
+          sortMode={sortMode}
+          onSortModeChange={handleSortModeChange}
           showSearch={true}
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
@@ -146,6 +170,7 @@ const Dashboard = ({ currentView, onViewChange }) => {
                   tasks={sortedGroups[monthKey]}
                   onEditTask={handleEditTask}
                   onAddTask={handleAddTask}
+                  onManualSort={() => handleSortModeChange('manual')}
                 />
               ))
             )}
@@ -157,6 +182,8 @@ const Dashboard = ({ currentView, onViewChange }) => {
             tasks={filteredTasks}
             onEditTask={handleEditTask}
             onAddTask={handleAddTask}
+            sortMode={sortMode}
+            onManualSort={() => handleSortModeChange('manual')}
           />
         )}
 
